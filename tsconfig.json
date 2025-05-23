@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "outDir": "dist",    // Output compiled files directly to 'dist'
+    "rootDir": "src",    // Your source files are in the 'src' folder
+    "module": "CommonJS",
+    "target": "ES6",
+    "resolveJsonModule": true,   // Add this line
+    "esModuleInterop": true       // This is often helpful t
+  },
+  "include": ["src/**/*"]  // Include all files in the src folder
+}

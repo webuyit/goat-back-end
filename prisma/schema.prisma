@@ -1,0 +1,311 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Market {
+  id           String   @id @default(uuid())
+  name         String
+  baseSiloId   String   @unique
+  bridgeSiloId String   @unique
+  tvl          Decimal? @default(0.0)
+  volume       Decimal? @default(0.0)
+  protocolFee  Decimal? @default(0.0)
+  platformId   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  marketId     String?
+  baseSilo     Silo     @relation("BaseSilo", fields: [baseSiloId], references: [id])
+  bridgeSilo   Silo     @relation("BridgeSilo", fields: [bridgeSiloId], references: [id])
+  platform     Platform @relation(fields: [platformId], references: [id])
+
+  @@index([platformId])
+  @@index([baseSiloId])
+  @@index([bridgeSiloId])
+}
+
+model Silo {
+  id                   String             @id @default(uuid())
+  name                 String
+  siloAddress          String             @unique
+  ltv                  Decimal?
+  liquidationThreshold Decimal?
+  tvl                  Decimal?           @default(0.0)
+  tokenId              String
+  aprBorrow            Decimal?           @default(0.0)
+  aprDeposit           Decimal?           @default(0.0)
+  protocolFee          Decimal?           @default(0.0)
+  utilization          Decimal?           @default(0.0)
+  liquidationFee       Decimal?           @default(0.0)
+  riskLevel            RiskLevel          @default(LOW)
+  availableToBorrow    Decimal?           @default(0.0)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  marketBase           Market?            @relation("BaseSilo")
+  marketBridge         Market?            @relation("BridgeSilo")
+  token                Token              @relation(fields: [tokenId], references: [id])
+  rewardMultipliers    RewardMultiplier[]
+  siloRewards          SiloRewardConfig?
+
+  @@index([tokenId])
+}
+
+model SiloRewardConfig {
+  id                      String            @id @default(uuid())
+  siloId                  String            @unique
+  xpPerDollarDeposit      Float             @default(1.0) // XP per $1 deposit
+  xpPerDollarBorrow       Float             @default(0.5) // XP per $1 borrowed
+  sTokenRewardAPR         Float?            @default(0.0)
+  siloRewardAPR           Float?            @default(0.0)
+  sonicXpMultiplier       Float? // e.g., 10x Sonic Points
+  sonicXpMultiplierAction MultiplierAction? @default(DEPOSIT)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  silo                    Silo              @relation(fields: [siloId], references: [id])
+}
+
+model RewardMultiplier {
+  id          String  @id @default(uuid())
+  siloId      String? // Still keep a link to silo if needed
+  action      String // "DEPOSIT" or "BORROW"
+  tokenSymbol String
+  multiplier  Float // e.g., 2.0, 3.0
+  silo        Silo?   @relation(fields: [siloId], references: [id])
+
+  @@index([siloId])
+}
+
+model Platform {
+  id        String   @id @default(uuid())
+  name      String
+  tvl       Decimal? @default(0.0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  markets   Market[]
+  vaults    Vault[]
+}
+
+model Token {
+  id           String  @id @default(uuid())
+  name         String
+  symbol       String  @unique
+  logo         String
+  tokenAddress String
+  silos        Silo[]
+  vaultToken0  Vault[] @relation("VaultToken0")
+  vaultToken1  Vault[] @relation("VaultToken1")
+}
+
+model Vault {
+  id              String    @id @default(uuid())
+  name            String
+  vaultAddress    String    @unique
+  vaultType       VaultType @default(CONCENTRATED)
+  token0Id        String
+  token1Id        String
+  isToken0Allowed Boolean
+  isToken1Allowed Boolean
+  gauge           String
+  platformId      String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  token0          Token     @relation("VaultToken0", fields: [token0Id], references: [id])
+  token1          Token     @relation("VaultToken1", fields: [token1Id], references: [id])
+  platform        Platform  @relation(fields: [platformId], references: [id])
+
+  // Indexes
+  @@index([name])
+  @@index([token0Id])
+  @@index([token1Id])
+  @@index([platformId])
+}
+
+enum VaultType {
+  CONCENTRATED
+  STABLE
+  VOLATILE
+}
+
+model actions {
+  id             String        @id
+  userId         String
+  conversationId String
+  triggeredBy    Int[]
+  stoppedBy      Int[]
+  frequency      Int?
+  maxExecutions  Int?
+  description    String        @db.VarChar(255)
+  actionType     String        @db.VarChar(255)
+  params         Json?
+  timesExecuted  Int           @default(0)
+  lastExecutedAt DateTime?
+  triggered      Boolean       @default(false)
+  paused         Boolean       @default(false)
+  completed      Boolean       @default(false)
+  priority       Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  lastFailureAt  DateTime?
+  lastSuccessAt  DateTime?
+  startTime      DateTime?
+  name           String?       @db.VarChar(255)
+  conversations  conversations @relation(fields: [conversationId], references: [id])
+  users          users         @relation(fields: [userId], references: [id])
+
+  @@index([stoppedBy], map: "stoppedBy_idx")
+  @@index([triggeredBy], map: "triggeredBy_idx")
+}
+
+model conversations {
+  id            String     @id
+  userId        String
+  title         String
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime
+  visibility    Visibility @default(PRIVATE)
+  lastMessageAt DateTime?
+  lastReadAt    DateTime?  @default(now())
+  actions       actions[]
+  users         users      @relation(fields: [userId], references: [id])
+  messages      messages[]
+}
+
+model messages {
+  id                       String        @id
+  conversationId           String
+  role                     String
+  content                  String?
+  createdAt                DateTime      @default(now())
+  experimental_attachments Json?
+  toolInvocations          Json?
+  conversations            conversations @relation(fields: [conversationId], references: [id])
+}
+
+model rules {
+  id        String   @id
+  userId    String
+  name      String   @db.VarChar(255)
+  field     String   @db.VarChar(255)
+  operator  Operator
+  value     String   @db.VarChar(255)
+  triggered Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+  users     users    @relation(fields: [userId], references: [id])
+}
+
+model saved_prompts {
+  id             String    @id
+  userId         String
+  title          String    @db.VarChar(255)
+  content        String
+  usageFrequency Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime
+  lastUsedAt     DateTime?
+  isFavorite     Boolean   @default(false)
+  users          users     @relation(fields: [userId], references: [id])
+
+  @@index([userId, lastUsedAt], map: "idx_userId_lastUsedAt")
+}
+
+model telegram_chats {
+  id        String   @id
+  userId    String   @unique
+  username  String
+  chatId    String?
+  createdAt DateTime @default(now())
+  users     users    @relation(fields: [userId], references: [id])
+}
+
+model token_stats {
+  id               String   @id
+  userId           String
+  messageIds       String[]
+  totalTokens      Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+  completionTokens Int
+  promptTokens     Int
+  users            users    @relation(fields: [userId], references: [id])
+}
+
+model users {
+  id             String          @id
+  privyId        String          @unique
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime
+  earlyAccess    Boolean         @default(false)
+  degenMode      Boolean         @default(false)
+  actions        actions[]
+  conversations  conversations[]
+  rules          rules[]
+  saved_prompts  saved_prompts[]
+  telegram_chats telegram_chats?
+  token_stats    token_stats[]
+  wallets        wallets[]
+}
+
+model wallets {
+  id                  String       @id
+  ownerId             String
+  name                String
+  publicKey           String
+  encryptedPrivateKey String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime
+  active              Boolean      @default(true)
+  chain               Chain        @default(SOLANA)
+  delegated           Boolean      @default(false)
+  walletSource        WalletSource @default(CUSTOM)
+  users               users        @relation(fields: [ownerId], references: [id])
+
+  @@unique([ownerId, publicKey])
+}
+
+model AccessCode {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  isValid   Boolean
+  createdAt DateTime @default(now())
+  expireAt  DateTime
+}
+
+enum MultiplierAction {
+  DEPOSIT
+  BORROW
+  HOLD
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Chain {
+  SOLANA
+}
+
+enum Operator {
+  eq
+  lt
+  gt
+  contains
+}
+
+enum Visibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum WalletSource {
+  CUSTOM
+  PRIVY
+}
