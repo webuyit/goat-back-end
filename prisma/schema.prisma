@@ -8,304 +8,304 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model Market {
-  id           String   @id @default(uuid())
-  name         String
-  baseSiloId   String   @unique
-  bridgeSiloId String   @unique
-  tvl          Decimal? @default(0.0)
-  volume       Decimal? @default(0.0)
-  protocolFee  Decimal? @default(0.0)
-  platformId   String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  marketId     String?
-  baseSilo     Silo     @relation("BaseSilo", fields: [baseSiloId], references: [id])
-  bridgeSilo   Silo     @relation("BridgeSilo", fields: [bridgeSiloId], references: [id])
-  platform     Platform @relation(fields: [platformId], references: [id])
+model User {
+  id               String         @id @default(cuid())
+  privyId          String?        @unique
+  clerkId          String?        @unique
+  faucetPoints     Int            @default(100)
+  points           Int            @default(0)
+  profilePicture   String?
+  bets             Bet[]
+  firstName        String?
+  lastName         String?
+  fullName         String?
+  email            String?        @unique
+  phone            String?        @unique
+  username         String?        @unique
+  lastClaimedAt    DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  earlyAccess      Boolean        @default(false)
+  degenMode        Boolean        @default(false)
+  wallets          Wallet[]
+  notifications    Notification[]
+  transactions     Transaction[]
+  UserLevel        UserLevel?
+  sponsoredMarkets Market[]       @relation("CreatedMarkets")
 
-  @@index([platformId])
-  @@index([baseSiloId])
-  @@index([bridgeSiloId])
+  // Refferal system 
+  referralCode String  @unique
+  referredById String? // user who referred them
+  referredBy   User?   @relation("Referrals", fields: [referredById], references: [id])
+  referrals    User[]  @relation("Referrals")
+
+  @@map("users")
 }
 
-model Silo {
-  id                   String             @id @default(uuid())
-  name                 String
-  siloAddress          String             @unique
-  ltv                  Decimal?
-  liquidationThreshold Decimal?
-  tvl                  Decimal?           @default(0.0)
-  tokenId              String
-  aprBorrow            Decimal?           @default(0.0)
-  aprDeposit           Decimal?           @default(0.0)
-  protocolFee          Decimal?           @default(0.0)
-  utilization          Decimal?           @default(0.0)
-  liquidationFee       Decimal?           @default(0.0)
-  riskLevel            RiskLevel          @default(LOW)
-  availableToBorrow    Decimal?           @default(0.0)
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  marketBase           Market?            @relation("BaseSilo")
-  marketBridge         Market?            @relation("BridgeSilo")
-  token                Token              @relation(fields: [tokenId], references: [id])
-  rewardMultipliers    RewardMultiplier[]
-  siloRewards          SiloRewardConfig?
-
-  @@index([tokenId])
-}
-
-model SiloRewardConfig {
-  id                      String            @id @default(uuid())
-  siloId                  String            @unique
-  xpPerDollarDeposit      Float             @default(1.0) // XP per $1 deposit
-  xpPerDollarBorrow       Float             @default(0.5) // XP per $1 borrowed
-  sTokenRewardAPR         Float?            @default(0.0)
-  siloRewardAPR           Float?            @default(0.0)
-  sonicXpMultiplier       Float? // e.g., 10x Sonic Points
-  sonicXpMultiplierAction MultiplierAction? @default(DEPOSIT)
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @updatedAt
-  silo                    Silo              @relation(fields: [siloId], references: [id])
-}
-
-model RewardMultiplier {
-  id          String  @id @default(uuid())
-  siloId      String? // Still keep a link to silo if needed
-  action      String // "DEPOSIT" or "BORROW"
-  tokenSymbol String
-  multiplier  Float // e.g., 2.0, 3.0
-  silo        Silo?   @relation(fields: [siloId], references: [id])
-
-  @@index([siloId])
-}
-
-model Platform {
-  id        String   @id @default(uuid())
-  name      String
-  tvl       Decimal? @default(0.0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  markets   Market[]
-  vaults    Vault[]
-}
-
-model Token {
-  id           String  @id @default(uuid())
-  name         String
-  symbol       String  @unique
-  logo         String
-  tokenAddress String
-  silos        Silo[]
-  vaultToken0  Vault[] @relation("VaultToken0")
-  vaultToken1  Vault[] @relation("VaultToken1")
-}
-
-model Vault {
-  id              String    @id @default(uuid())
-  name            String
-  vaultAddress    String    @unique
-  vaultType       VaultType @default(CONCENTRATED)
-  token0Id        String
-  token1Id        String
-  isToken0Allowed Boolean
-  isToken1Allowed Boolean
-  gauge           String
-  platformId      String
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  token0          Token     @relation("VaultToken0", fields: [token0Id], references: [id])
-  token1          Token     @relation("VaultToken1", fields: [token1Id], references: [id])
-  platform        Platform  @relation(fields: [platformId], references: [id])
-
-  // Indexes
-  @@index([name])
-  @@index([token0Id])
-  @@index([token1Id])
-  @@index([platformId])
-}
-
-enum VaultType {
-  CONCENTRATED
-  STABLE
-  VOLATILE
-}
-
-model actions {
-  id             String        @id
-  userId         String
-  conversationId String
-  triggeredBy    Int[]
-  stoppedBy      Int[]
-  frequency      Int?
-  maxExecutions  Int?
-  description    String        @db.VarChar(255)
-  actionType     String        @db.VarChar(255)
-  params         Json?
-  timesExecuted  Int           @default(0)
-  lastExecutedAt DateTime?
-  triggered      Boolean       @default(false)
-  paused         Boolean       @default(false)
-  completed      Boolean       @default(false)
-  priority       Int           @default(0)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime
-  lastFailureAt  DateTime?
-  lastSuccessAt  DateTime?
-  startTime      DateTime?
-  name           String?       @db.VarChar(255)
-  conversations  conversations @relation(fields: [conversationId], references: [id])
-  users          users         @relation(fields: [userId], references: [id])
-
-  @@index([stoppedBy], map: "stoppedBy_idx")
-  @@index([triggeredBy], map: "triggeredBy_idx")
-}
-
-model conversations {
-  id            String     @id
-  userId        String
-  title         String
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime
-  visibility    Visibility @default(PRIVATE)
-  lastMessageAt DateTime?
-  lastReadAt    DateTime?  @default(now())
-  actions       actions[]
-  users         users      @relation(fields: [userId], references: [id])
-  messages      messages[]
-}
-
-model messages {
-  id                       String        @id
-  conversationId           String
-  role                     String
-  content                  String?
-  createdAt                DateTime      @default(now())
-  experimental_attachments Json?
-  toolInvocations          Json?
-  conversations            conversations @relation(fields: [conversationId], references: [id])
-}
-
-model rules {
-  id        String   @id
-  userId    String
-  name      String   @db.VarChar(255)
-  field     String   @db.VarChar(255)
-  operator  Operator
-  value     String   @db.VarChar(255)
-  triggered Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime
-  users     users    @relation(fields: [userId], references: [id])
-}
-
-model saved_prompts {
-  id             String    @id
-  userId         String
-  title          String    @db.VarChar(255)
-  content        String
-  usageFrequency Int       @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime
-  lastUsedAt     DateTime?
-  isFavorite     Boolean   @default(false)
-  users          users     @relation(fields: [userId], references: [id])
-
-  @@index([userId, lastUsedAt], map: "idx_userId_lastUsedAt")
-}
-
-model telegram_chats {
-  id        String   @id
-  userId    String   @unique
-  username  String
-  chatId    String?
-  createdAt DateTime @default(now())
-  users     users    @relation(fields: [userId], references: [id])
-}
-
-model token_stats {
-  id               String   @id
-  userId           String
-  messageIds       String[]
-  totalTokens      Int
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime
-  completionTokens Int
-  promptTokens     Int
-  users            users    @relation(fields: [userId], references: [id])
-}
-
-model users {
-  id             String          @id
-  privyId        String          @unique
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime
-  earlyAccess    Boolean         @default(false)
-  degenMode      Boolean         @default(false)
-  actions        actions[]
-  conversations  conversations[]
-  rules          rules[]
-  saved_prompts  saved_prompts[]
-  telegram_chats telegram_chats?
-  token_stats    token_stats[]
-  wallets        wallets[]
-}
-
-model wallets {
-  id                  String       @id
+model Wallet {
+  id                  String         @id @default(cuid())
   ownerId             String
-  name                String
+  name                String?
   publicKey           String
-  encryptedPrivateKey String?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime
-  active              Boolean      @default(true)
-  chain               Chain        @default(SOLANA)
-  delegated           Boolean      @default(false)
-  walletSource        WalletSource @default(CUSTOM)
-  users               users        @relation(fields: [ownerId], references: [id])
+  encryptedPrivateKey String?        @db.Text
+  walletSource        WalletSource   @default(CUSTOM)
+  chain               Chain          @default(CHILIZ)
+  delegated           Boolean        @default(false)
+  active              Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  owner               User           @relation(fields: [ownerId], references: [id])
+  transactions        Transaction[]
+  notifications       Notification[]
 
   @@unique([ownerId, publicKey])
+  @@map("wallets")
 }
 
-model AccessCode {
+model Market {
+  id               String         @id @default(cuid())
+  title            String
+  status           MarketStatus   @default(OPEN) // "open", "closed", "resolved"
+  outcomes         Outcome[]
+  marketType       MarketType     @default(CUSTOM)
+  createdAt        DateTime       @default(now())
+  coverUrl         String? //SOOON
+  resolvedAt       DateTime?
+  closedAt         DateTime?
+  startsAt         DateTime       @default(now())
+  endsAt           DateTime       @default(now())
+  winningOutcomeId String? // ID of the winning outcome
+  resolvedById     String?
+  // Sponsorship
+  creatorId        String?
+  creator          User?          @relation("CreatedMarkets", fields: [creatorId], references: [id])
+  sponsoredStake   Float          @default(0) // Locked stake
+  feePercent       Float          @default(5.0) // Platform cut
+  creatorFeeShare  Float          @default(50.0) // % of platform fee given to creator
+  players          PlayerMarket[]
+
+  // analytics
+  totalPools        Float? // sum of all stakes
+  totalLosers       Float? // sum of losing stakes
+  platformFeeEarned Float? // fee taken by platform
+  creatorFeeEarned  Float? // fee given to market creator
+}
+
+model Outcome {
+  id           String @id @default(cuid())
+  label        String // e.g. "Yes", "No"
+  marketId     String
+  market       Market @relation(fields: [marketId], references: [id])
+  bets         Bet[]
+  // These fields are updated every time a bet is placed
+  totalStaked  Int    @default(0) // in points
+  bettorsCount Int    @default(0) // unique users
+}
+
+model Bet {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  outcomeId       String
+  outcome         Outcome   @relation(fields: [outcomeId], references: [id])
+  amount          Int // in points
+  oddsAtBet       Float? // odds calculated and saved at bet placement time
+  potentialPayout Float? // amount * oddsAtBet (pre-calculated for convenience)
+  status          BetStatus @default(PENDING) // "pending", "won", "lost"
+  fee             Int?
+  createdAt       DateTime  @default(now())
+}
+
+model SponsorEarning {
   id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  isValid   Boolean
+  sponsorId String // user who owns the sponsored market
+  marketId  String
+  betId     String
+  amount    Int
   createdAt DateTime @default(now())
-  expireAt  DateTime
 }
 
-enum MultiplierAction {
+model ReferralEarning {
+  id               String   @id @default(cuid())
+  referrerId       String
+  referredId       String
+  betId            String
+  fromSponsorShare Boolean  @default(false) // was this earned from a sponsor's cut?
+  amountEarned     Int
+  source           String?
+  createdAt        DateTime @default(now())
+}
+
+//CATEGIRISE PLAYERS AND MARKETS
+
+model Player {
+  id             String         @id @default(cuid())
+  name           String
+  teamId         String?
+  profilePicture String?
+  nationalityId  String?
+  mainColor      String?
+  stats          PlayerStat[]
+  team           Team?          @relation(fields: [teamId], references: [id])
+  nationality    Nationality?   @relation(fields: [nationalityId], references: [id])
+  highlights     Highlight[]
+  markets        PlayerMarket[]
+  createdAt      DateTime       @default(now())
+}
+
+model Nationality {
+  id      String   @id @default(cuid())
+  name    String   @unique // e.g. "France", "Brazil"
+  flag    String? // URL to flag image
+  players Player[]
+}
+
+model Team {
+  id       String   @id @default(cuid())
+  name     String   @unique
+  logo     String? // URL to team logo
+  leagueId String?
+  league   League?  @relation(fields: [leagueId], references: [id])
+  players  Player[]
+}
+
+model League {
+  id    String  @id @default(cuid())
+  name  String  @unique
+  logo  String? // Optional: league logo
+  teams Team[]
+}
+
+model Highlight {
+  id        String   @id @default(cuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id])
+  title     String
+  url       String // link to the video
+  createdAt DateTime @default(now())
+}
+
+// JOIN TABLE FOR PLAYER MARKETS
+model PlayerMarket {
+  id       String @id @default(cuid())
+  marketId String
+  playerId String
+  market   Market @relation(fields: [marketId], references: [id])
+  player   Player @relation(fields: [playerId], references: [id])
+}
+
+// Player stats 
+model PlayerStat {
+  id          String   @id @default(cuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id])
+  date        DateTime // Date of the stat (e.g., match date)
+  goals       Int      @default(0)
+  assists     Int      @default(0)
+  minutes     Int      @default(0)
+  yellowCards Int      @default(0)
+  redCards    Int      @default(0)
+  isInjured   Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  title     String? // Short headline
+  body      String? // Detailed message
+  type      NotificationType
+  link      String? // Optional link to view more (market, player, etc.)
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  Wallet    Wallet?          @relation(fields: [walletId], references: [id])
+  walletId  String?
+}
+
+model Transaction {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  type          TransactionType
+  amount        Float
+  token         String? // e.g., "ETH", "POINT"
+  description   String?
+  transactionId String? // ID from the external transaction (if applicable)
+
+  createdAt DateTime @default(now())
+  Wallet    Wallet?  @relation(fields: [walletId], references: [id])
+  walletId  String?
+}
+
+model UserLevel {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  level     Int      @default(1)
+  xp        Int      @default(0)
+  nextXp    Int      @default(100) // XP needed to reach next level
+  updatedAt DateTime @updatedAt
+}
+
+enum TransactionType {
   DEPOSIT
-  BORROW
-  HOLD
-}
-
-enum RiskLevel {
-  LOW
-  MEDIUM
-  HIGH
-}
-
-enum Chain {
-  SOLANA
-}
-
-enum Operator {
-  eq
-  lt
-  gt
-  contains
-}
-
-enum Visibility {
-  PRIVATE
-  PUBLIC
+  WITHDRAW
+  BET_PLACED
+  BET_WON
+  BET_LOST
+  STAKE_REWARD
+  LEVEL_UP_REWARD
+  MARKET_CREATED
+  REFERRAL_REWARD
+  SPONSOR_REWARD
 }
 
 enum WalletSource {
   CUSTOM
   PRIVY
+  SOCIOS
+  METAMASK
+  WALLET_CONNECT
+}
+
+enum Chain {
+  SOLANA
+  CHILIZ
+  ETHEREUM
+}
+
+enum NotificationType {
+  MARKET_RESOLVED
+  BET_RESULT
+  NEW_HIGHLIGHT
+  NEW_MARKET
+  STAKING_REWARD
+  REWARD
+}
+
+enum MarketType {
+  CUSTOM
+  SPONSORED
+  PARTENERSHIP
+  FRIENDLY
+  TOURNAMENT
+}
+
+enum MarketStatus {
+  OPEN
+  CLOSED
+  PENDING
+  DELAYED
+  ENDED
+  RESOLVED
+}
+
+enum BetStatus {
+  WON
+  LOST
+  PENDING
 }
