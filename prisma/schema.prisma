@@ -69,7 +69,8 @@ model Market {
   outcomes         Outcome[]
   marketType       MarketType     @default(CUSTOM)
   createdAt        DateTime       @default(now())
-  coverUrl         String? //SOOON
+  coverUrl         String?
+  themeColor       String?
   resolvedAt       DateTime?
   closedAt         DateTime?
   startsAt         DateTime       @default(now())

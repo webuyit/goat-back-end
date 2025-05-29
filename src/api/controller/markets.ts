@@ -3,8 +3,17 @@ import prisma from '../prisma-client';
 import { startOfWeek, subDays } from 'date-fns';
 import { Prisma, MarketStatus, MarketType } from '@prisma/client';
 export const createSponsoredMarket = expressAsyncHandler(async (req, res) => {
-  const { title, outcomes, stakeAmount, userId, playerIds, endsAt, startsAt } =
-    req.body;
+  const {
+    title,
+    outcomes,
+    stakeAmount,
+    userId,
+    playerIds,
+    endsAt,
+    startsAt,
+    coverUrl,
+    themeColor,
+  } = req.body;
 
   if (!title || !outcomes || !Array.isArray(outcomes) || outcomes.length < 2) {
     res.status(400).json({
@@ -45,6 +54,8 @@ export const createSponsoredMarket = expressAsyncHandler(async (req, res) => {
         endsAt,
         startsAt,
         creatorId: userId,
+        coverUrl,
+        themeColor,
         outcomes: {
           create: outcomes.map((label) => ({ label })),
         },
@@ -75,7 +86,16 @@ export const createSponsoredMarket = expressAsyncHandler(async (req, res) => {
 });
 
 export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
-  const { title, outcomes, userId, playerIds, startsAt, endsAt } = req.body;
+  const {
+    title,
+    outcomes,
+    userId,
+    playerIds,
+    startsAt,
+    endsAt,
+    coverUrl,
+    themeColor,
+  } = req.body;
 
   if (!title || !outcomes || !Array.isArray(outcomes) || outcomes.length < 2) {
     res.status(400).json({
@@ -99,6 +119,8 @@ export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
       creatorId: userId,
       startsAt,
       endsAt,
+      coverUrl,
+      themeColor,
       outcomes: {
         create: outcomes.map((label) => ({ label })),
       },
@@ -274,6 +296,12 @@ export const getMarketsWithStats = expressAsyncHandler(async (req, res) => {
       sponsoredStake: true,
       feePercent: true,
       creatorFeeShare: true,
+      themeColor: true,
+      coverUrl: true,
+      creatorFeeEarned: true,
+      platformFeeEarned: true,
+      totalLosers: true,
+      totalPools: true,
       creator: {
         select: {
           id: true,

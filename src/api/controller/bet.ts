@@ -1,6 +1,8 @@
 import expressAsyncHandler from 'express-async-handler';
 import prisma from '../prisma-client';
 import { calculateOdds } from '../lib/calculate-odds';
+import { Prisma, BetStatus } from '@prisma/client';
+import { startOfWeek, subDays } from 'date-fns';
 
 /*export const placeBet = expressAsyncHandler(async (req, res) => {
   const { userId, outcomeId, amount } = req.body;
@@ -291,5 +293,128 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
     bet: placedBet,
     odds: oddsAtBet,
     impliedProbability: selectedOdds?.impliedProbability ?? null,
+  });
+});
+
+export const getBetsWithStats = expressAsyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const search = (req.query.search as string) || '';
+  const status = (req.query.status as string) || '';
+  const outcomeId = (req.query.outcomeId as string) || '';
+
+  const skip = (page - 1) * limit;
+
+  // Build filter condition
+  const where: Prisma.BetWhereInput = {
+    ...(status ? { status: status as BetStatus } : {}),
+    ...(outcomeId ? { outcomeId } : {}),
+    ...(search
+      ? {
+          user: {
+            fullName: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+        }
+      : {}),
+  };
+
+  // 1. Bets list with pagination
+  const bets = await prisma.bet.findMany({
+    where,
+    skip,
+    take: limit,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      user: {
+        select: {
+          id: true,
+          fullName: true,
+          profilePicture: true,
+        },
+      },
+      outcome: {
+        select: {
+          id: true,
+          label: true,
+          market: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // 2. Total bets
+  const totalBets = await prisma.bet.count({ where });
+
+  // 3. Total amount staked
+  const totalAmountStaked = await prisma.bet.aggregate({
+    where,
+    _sum: {
+      amount: true,
+    },
+  });
+
+  // 4. Growth Stats
+  const now = new Date();
+  const startOfThisWeek = startOfWeek(now, { weekStartsOn: 1 });
+  const startOfLastWeek = subDays(startOfThisWeek, 7);
+  const endOfLastWeek = subDays(startOfThisWeek, 1);
+
+  const thisWeekCount = await prisma.bet.count({
+    where: {
+      createdAt: {
+        gte: startOfThisWeek,
+      },
+    },
+  });
+
+  const lastWeekCount = await prisma.bet.count({
+    where: {
+      createdAt: {
+        gte: startOfLastWeek,
+        lte: endOfLastWeek,
+      },
+    },
+  });
+
+  const growthPercent =
+    lastWeekCount === 0
+      ? 100
+      : ((thisWeekCount - lastWeekCount) / lastWeekCount) * 100;
+
+  // 5. Today's Bets
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const todayCount = await prisma.bet.count({
+    where: {
+      createdAt: {
+        gte: today,
+      },
+    },
+  });
+
+  res.status(200).json({
+    bets,
+    pagination: {
+      total: totalBets,
+      page,
+      limit,
+    },
+    stats: {
+      totalBets,
+      totalAmountStaked: totalAmountStaked._sum.amount || 0,
+      newBetsThisWeek: thisWeekCount,
+      newBetsLastWeek: lastWeekCount,
+      growthPercent: Math.round(growthPercent * 100) / 100,
+      betsToday: todayCount,
+    },
   });
 });
