@@ -2,6 +2,7 @@ import expressAsyncHandler from 'express-async-handler';
 import prisma from '../prisma-client';
 import { startOfWeek, subDays } from 'date-fns';
 import { Prisma, MarketStatus, MarketType } from '@prisma/client';
+import { calculateOdds } from '../lib/calculate-odds';
 export const createSponsoredMarket = expressAsyncHandler(async (req, res) => {
   const {
     title,
@@ -331,6 +332,14 @@ export const getMarketsWithStats = expressAsyncHandler(async (req, res) => {
     },
   });
 
+  // markets with odd
+  const enhancedMarkets = markets.map((market) => {
+    const outcomesWithOdds = calculateOdds(market.outcomes);
+    return {
+      ...market,
+      outcomes: outcomesWithOdds,
+    };
+  });
   // 2. Total Markets
   const totalMarkets = await prisma.market.count({ where });
 
@@ -375,7 +384,7 @@ export const getMarketsWithStats = expressAsyncHandler(async (req, res) => {
   });
 
   res.status(200).json({
-    markets,
+    markets: enhancedMarkets,
     pagination: {
       total: totalMarkets,
       page,

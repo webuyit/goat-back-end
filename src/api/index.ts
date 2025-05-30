@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import userRoutes from './routes/user-routes';
 import playerRoutes from './routes/player-routes';
 import marketRoutes from './routes/market-routes';
+import betRoutes from './routes/bet-routes';
 import cors from 'cors';
 import cron from 'node-cron';
 dotenv.config();
@@ -20,6 +21,7 @@ app.get('/', (req: Request, res: Response) => {
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/players', playerRoutes);
 app.use('/api/v1/markets', marketRoutes);
+app.use('/api/v1/bets', betRoutes);
 
 // Schedule the cron job to run every 15 minutes
 cron.schedule('*/15 * * * *', () => {

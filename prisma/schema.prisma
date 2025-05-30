@@ -86,7 +86,7 @@ model Market {
   players          PlayerMarket[]
 
   // analytics
-  totalPools        Float? // sum of all stakes
+  totalPools        Float? @default(0) // sum of all stakes
   totalLosers       Float? // sum of losing stakes
   platformFeeEarned Float? // fee taken by platform
   creatorFeeEarned  Float? // fee given to market creator

@@ -93,7 +93,7 @@ import { startOfWeek, subDays } from 'date-fns';
 });
 */
 
-export const placeBet2 = expressAsyncHandler(async (req, res) => {
+export const placeBet = expressAsyncHandler(async (req, res) => {
   const { userId, outcomeId, amount } = req.body;
 
   if (!userId || !outcomeId || !amount || amount <= 0) {
@@ -110,7 +110,7 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
 
   if (!user) res.status(404).json({ message: 'User not found.' });
   if (!outcome) res.status(404).json({ message: 'Outcome not found.' });
-  if (user.points < amount)
+  if (user.faucetPoints < amount)
     res.status(400).json({ message: 'Insufficient balance.' });
   if (outcome.market.status !== 'OPEN') {
     res.status(400).json({ message: 'Market is not open for betting.' });
@@ -134,7 +134,7 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
     // Deduct user points
     await tx.user.update({
       where: { id: userId },
-      data: { points: { decrement: amount } },
+      data: { faucetPoints: { decrement: amount } },
     });
 
     // Create the bet
@@ -155,6 +155,11 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
       data: {
         totalStaked: { increment: amount },
         bettorsCount: existingBet ? undefined : { increment: 1 },
+        market: {
+          update: {
+            totalPools: { increment: amount },
+          },
+        },
       },
     });
 
@@ -174,10 +179,8 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
     const isSponsored = outcome.market.marketType === 'SPONSORED';
     const sponsorId = outcome.market.creatorId;
 
-    const [referrerId, userBetCount] = await Promise.all([
-      user.referralCode,
-      tx.bet.count({ where: { userId } }),
-    ]);
+    const referrerId = user.referralCode;
+    const userBetCount = await tx.bet.count({ where: { userId } });
 
     // Sponsored Market
     if (isSponsored) {
@@ -287,6 +290,221 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
     }
     // ===== End: Referral + Sponsor logic =====
   });
+
+  res.status(201).json({
+    message: 'Bet placed successfully.',
+    bet: placedBet,
+    odds: oddsAtBet,
+    impliedProbability: selectedOdds?.impliedProbability ?? null,
+  });
+});
+
+export const placeBet2 = expressAsyncHandler(async (req, res) => {
+  const { userId, outcomeId, amount } = req.body;
+
+  if (!userId || !outcomeId || !amount || amount <= 0) {
+    res.status(400).json({ message: 'Invalid bet input.' });
+    throw new Error('Invalid bet input');
+  }
+
+  // Fast read-only queries
+  const [user, outcome] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.outcome.findUnique({
+      where: { id: outcomeId },
+      include: { market: true },
+    }),
+  ]);
+
+  if (!user) {
+    res.status(404).json({ message: 'User not found.' });
+    throw new Error('User not found.');
+  }
+  if (!outcome) res.status(404).json({ message: 'Outcome not found.' });
+  if (user.faucetPoints < amount) {
+    res.status(400).json({ message: 'Insufficient balance.' });
+    throw new Error('Insufficient balance.');
+  }
+  if (outcome.market.status !== 'OPEN') {
+    res.status(400).json({ message: 'Market is not open for betting.' });
+    throw new Error('Market is not open for betting.');
+  }
+
+  const allOutcomes = await prisma.outcome.findMany({
+    where: { marketId: outcome.marketId },
+  });
+
+  const oddsArray = calculateOdds(allOutcomes);
+  const selectedOdds = oddsArray.find((o) => o.id === outcomeId);
+  const oddsAtBet = selectedOdds?.odds ?? 1;
+  const feeAmount = Math.floor(amount * 0.05);
+
+  let placedBet;
+  let referralShare = 0;
+  let finalSponsorShare = 0;
+  const notifications = [];
+
+  // Count user bets BEFORE transaction
+  const userBetCount = await prisma.bet.count({ where: { userId } });
+
+  await prisma.$transaction(async (tx) => {
+    const existingBet = await tx.bet.findFirst({
+      where: { userId, outcomeId },
+    });
+
+    // Deduct balance
+    await tx.user.update({
+      where: { id: userId },
+      data: { faucetPoints: { decrement: amount } },
+    });
+
+    // Place the bet
+    placedBet = await tx.bet.create({
+      data: {
+        userId,
+        outcomeId,
+        amount,
+        oddsAtBet,
+        potentialPayout: Math.floor(amount * oddsAtBet),
+        status: 'PENDING',
+      },
+    });
+
+    // Update outcome and market pools
+    await tx.outcome.update({
+      where: { id: outcomeId },
+      data: {
+        totalStaked: { increment: amount },
+        bettorsCount: existingBet ? undefined : { increment: 1 },
+        market: {
+          update: {
+            totalPools: { increment: amount },
+          },
+        },
+      },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId,
+        amount,
+        type: 'BET_PLACED',
+        transactionId: placedBet.id,
+      },
+    });
+
+    // Handle referral/sponsor earnings
+    const isSponsored = outcome.market.marketType === 'SPONSORED';
+    const sponsorId = outcome.market.creatorId;
+    const referrerId = user.referredById;
+
+    console.log(`🔥 REFFERAL ID`, referrerId);
+    //console.log(`Is reffered ?`, referrerId)
+
+    if (isSponsored) {
+      const sponsorCut = Math.floor(feeAmount * 0.3);
+      if (referrerId && userBetCount < 10) {
+        referralShare = Math.floor(feeAmount * 0.1);
+        finalSponsorShare = sponsorCut - referralShare;
+
+        await tx.user.update({
+          where: { id: referrerId },
+          data: { points: { increment: referralShare } },
+        });
+
+        await tx.referralEarning.create({
+          data: {
+            referrerId,
+            referredId: userId,
+            amountEarned: referralShare,
+            source: 'SPONSORED_MARKET',
+            betId: placedBet.id,
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            userId: referrerId,
+            amount: referralShare,
+            type: 'REFERRAL_REWARD',
+            transactionId: placedBet.id,
+          },
+        });
+
+        notifications.push({
+          userId: referrerId,
+          title: 'Referral Reward',
+          type: 'REWARD',
+          body: `You earned ${referralShare} points for referring ${user.fullName}.`,
+        });
+      } else {
+        finalSponsorShare = sponsorCut;
+      }
+
+      if (finalSponsorShare > 0) {
+        await tx.user.update({
+          where: { id: sponsorId },
+          data: { points: { increment: finalSponsorShare } },
+        });
+
+        await tx.transaction.create({
+          data: {
+            userId: sponsorId,
+            amount: finalSponsorShare,
+            type: 'SPONSOR_REWARD',
+            transactionId: placedBet.id,
+          },
+        });
+
+        notifications.push({
+          userId: sponsorId,
+          title: 'Sponsor Reward',
+          type: 'REWARD',
+          body: `You earned ${finalSponsorShare} points as sponsor of "${outcome.market.title}".`,
+        });
+      }
+    } else {
+      if (referrerId && userBetCount < 10) {
+        referralShare = Math.floor(feeAmount * 0.1);
+
+        await tx.user.update({
+          where: { id: referrerId },
+          data: { points: { increment: referralShare } },
+        });
+
+        await tx.referralEarning.create({
+          data: {
+            referrerId,
+            referredId: userId,
+            amountEarned: referralShare,
+            source: 'UNSPONSORED_MARKET',
+            betId: placedBet.id,
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            userId: referrerId,
+            amount: referralShare,
+            type: 'REFERRAL_REWARD',
+            transactionId: placedBet.id,
+          },
+        });
+
+        notifications.push({
+          userId: referrerId,
+          title: 'Referral Reward',
+          type: 'REWARD',
+          body: `You earned ${referralShare} points for referring ${user.fullName}.`,
+        });
+      }
+    }
+  });
+
+  // 🔥 Notifications outside transaction
+  await Promise.all(
+    notifications.map((note) => prisma.notification.create({ data: note })),
+  );
 
   res.status(201).json({
     message: 'Bet placed successfully.',
@@ -416,5 +634,53 @@ export const getBetsWithStats = expressAsyncHandler(async (req, res) => {
       growthPercent: Math.round(growthPercent * 100) / 100,
       betsToday: todayCount,
     },
+  });
+});
+
+// GET ODDS
+export const getMarketOdds = expressAsyncHandler(async (req, res) => {
+  const { marketId } = req.params;
+  const { selectedOutcomeId, userAmount } = req.query;
+
+  if (!marketId) {
+    res.status(400).json({ message: 'Market ID is required.' });
+  }
+
+  const outcomes = await prisma.outcome.findMany({
+    where: { marketId },
+    select: {
+      id: true,
+      label: true,
+      totalStaked: true,
+    },
+  });
+
+  if (!outcomes || outcomes.length === 0) {
+    res.status(404).json({ message: 'No outcomes found for this market.' });
+  }
+
+  const oddsData = calculateOdds(outcomes);
+
+  let potentialPayout: number | null = null;
+
+  if (selectedOutcomeId && userAmount) {
+    const selected = oddsData.find((o) => o.id === selectedOutcomeId);
+
+    if (selected) {
+      const userAmountNumber = parseFloat(userAmount as string);
+      if (!isNaN(userAmountNumber) && userAmountNumber > 0) {
+        potentialPayout = parseFloat(
+          (selected.odds * userAmountNumber).toFixed(2),
+        );
+      }
+    }
+  }
+
+  res.status(200).json({
+    marketId,
+    odds: oddsData,
+    selectedOutcomeId: selectedOutcomeId || null,
+    userAmount: userAmount || null,
+    potentialPayout,
   });
 });
