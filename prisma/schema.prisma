@@ -19,6 +19,7 @@ model User {
   firstName        String?
   lastName         String?
   fullName         String?
+  authMethod       String?
   email            String?        @unique
   phone            String?        @unique
   username         String?        @unique
@@ -250,6 +251,16 @@ model UserLevel {
   xp        Int      @default(0)
   nextXp    Int      @default(100) // XP needed to reach next level
   updatedAt DateTime @updatedAt
+}
+
+model Announcements {
+  id          String  @id @default(cuid())
+  title       String?
+  description String?
+  coverUrl    String
+  link        String
+  themeColor  String?
+  external    Boolean @default(false)
 }
 
 enum TransactionType {

@@ -139,11 +139,13 @@ export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
   });
 });
 
+// RESLOVE MARKET
 export const resolveMarket = expressAsyncHandler(async (req, res) => {
   const { marketId, winningOutcomeId } = req.body;
 
   if (!marketId || !winningOutcomeId) {
     res.status(400).json({ message: 'Missing marketId or winningOutcomeId.' });
+    return;
   }
 
   try {

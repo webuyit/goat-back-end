@@ -4,7 +4,20 @@ import { generateReferralCode } from '../lib/generateRefferalCode';
 import { subDays, startOfWeek, endOfWeek } from 'date-fns';
 import { Prisma } from '@prisma/client';
 export const registerUser = expressAsyncHandler(async (req, res) => {
-  const { privyId, clerkId, referredByCode, fullName } = req.body;
+  const {
+    privyId,
+    clerkId,
+    referredByCode,
+    fullName,
+    email,
+    firstName,
+    lastName,
+    username,
+    publicKey,
+    walletSource,
+    authMethod,
+    profilePicture,
+  } = req.body;
 
   if (!privyId && !clerkId) {
     res.status(400).json({ message: 'Missing auth provider ID.' });
@@ -32,6 +45,20 @@ export const registerUser = expressAsyncHandler(async (req, res) => {
     referredByUserId = referredByUser.id;
   }
 
+  // CHECK IF EMAIL IS AVAILABLE
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email }, // assuming `email` is unique in DB schema
+  });
+
+  if (existingUser) {
+    res.status(200).json({
+      message: 'User already exists. Linking current session.',
+      userId: existingUser.id,
+      referralCode: existingUser.referralCode,
+    });
+    return;
+  }
   // Create the user
   const newUser = await prisma.user.create({
     data: {
@@ -40,9 +67,24 @@ export const registerUser = expressAsyncHandler(async (req, res) => {
       referralCode,
       referredById: referredByUserId,
       fullName,
+      firstName,
+      lastName,
+      email,
+      username,
+      authMethod,
+      profilePicture,
       // All other fields left empty for now (onboarding)
+      wallets: {
+        create: {
+          walletSource,
+          publicKey,
+          name: walletSource,
+        },
+      },
     },
   });
+
+  // Register wallet
 
   res.status(201).json({
     message: 'User registered successfully.',
