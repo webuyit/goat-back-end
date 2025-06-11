@@ -35,10 +35,12 @@ model User {
   sponsoredMarkets Market[]       @relation("CreatedMarkets")
 
   // Refferal system 
-  referralCode String  @unique
-  referredById String? // user who referred them
-  referredBy   User?   @relation("Referrals", fields: [referredById], references: [id])
-  referrals    User[]  @relation("Referrals")
+  referralCode    String            @unique
+  referredById    String? // user who referred them
+  referredBy      User?             @relation("Referrals", fields: [referredById], references: [id])
+  referrals       User[]            @relation("Referrals")
+  rewards         Reward[]
+  PlatformRevenue PlatformRevenue[]
 
   @@map("users")
 }
@@ -87,10 +89,11 @@ model Market {
   players          PlayerMarket[]
 
   // analytics
-  totalPools        Float? @default(0) // sum of all stakes
+  totalPools        Float?            @default(0) // sum of all stakes
   totalLosers       Float? // sum of losing stakes
   platformFeeEarned Float? // fee taken by platform
   creatorFeeEarned  Float? // fee given to market creator
+  PlatformRevenue   PlatformRevenue[]
 }
 
 model Outcome {
@@ -105,17 +108,18 @@ model Outcome {
 }
 
 model Bet {
-  id              String    @id @default(cuid())
+  id              String            @id @default(cuid())
   userId          String
-  user            User      @relation(fields: [userId], references: [id])
+  user            User              @relation(fields: [userId], references: [id])
   outcomeId       String
-  outcome         Outcome   @relation(fields: [outcomeId], references: [id])
+  outcome         Outcome           @relation(fields: [outcomeId], references: [id])
   amount          Int // in points
   oddsAtBet       Float? // odds calculated and saved at bet placement time
   potentialPayout Float? // amount * oddsAtBet (pre-calculated for convenience)
-  status          BetStatus @default(PENDING) // "pending", "won", "lost"
+  status          BetStatus         @default(PENDING) // "pending", "won", "lost"
   fee             Int?
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime          @default(now())
+  PlatformRevenue PlatformRevenue[]
 }
 
 model SponsorEarning {
@@ -136,6 +140,21 @@ model ReferralEarning {
   amountEarned     Int
   source           String?
   createdAt        DateTime @default(now())
+}
+
+// PROTOCOL REVENUE
+model PlatformRevenue {
+  id        String        @id @default(uuid())
+  source    RevenueSource // enum: FEE, REFERRAL_SHARE, SPONSOR_SHARE
+  amount    Int
+  marketId  String?
+  betId     String?
+  userId    String? // who triggered it
+  createdAt DateTime      @default(now())
+
+  market Market? @relation(fields: [marketId], references: [id])
+  bet    Bet?    @relation(fields: [betId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
 }
 
 //CATEGIRISE PLAYERS AND MARKETS
@@ -253,6 +272,21 @@ model UserLevel {
   updatedAt DateTime @updatedAt
 }
 
+model Reward {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  type      RewardType
+  source    String // e.g., "SPONSORED_MARKET", "REFERRAL", etc.
+  amount    Int
+  status    RewardStatus @default(PENDING)
+  betId     String? // Optional reference
+  createdAt DateTime     @default(now())
+  claimedAt DateTime?
+
+  // Add constraints like: claimable until X date if needed
+}
+
 model Announcements {
   id          String  @id @default(cuid())
   title       String?
@@ -274,6 +308,7 @@ enum TransactionType {
   MARKET_CREATED
   REFERRAL_REWARD
   SPONSOR_REWARD
+  REWARD_CLAIMED
 }
 
 enum WalletSource {
@@ -320,4 +355,24 @@ enum BetStatus {
   WON
   LOST
   PENDING
+}
+
+enum RewardType {
+  REFERRAL
+  SPONSOR
+  PROMO
+}
+
+enum RewardStatus {
+  PENDING
+  CLAIMED
+  EXPIRED
+}
+
+enum RevenueSource {
+  FEE
+  REFERRAL_SHARE
+  SPONSOR_SHARE
+  WITHDRAWAL_FEE
+  OTHER
 }

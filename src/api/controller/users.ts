@@ -196,3 +196,35 @@ export const getUsersWithStats = expressAsyncHandler(async (req, res) => {
     },
   });
 });
+
+export const getUser = expressAsyncHandler(async (req, res) => {
+  const { userId, privyId, email } = req.query;
+
+  if (!userId && !privyId && !email) {
+    res.status(400).json({
+      message: 'Provide at least one filter: userId, privyId, or email.',
+    });
+    return;
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      ...(userId && { id: String(userId) }),
+      ...(privyId && { privyId: String(privyId) }),
+      ...(email && { email: String(email).toLowerCase() }),
+    },
+    include: {
+      wallets: true,
+      // Add includes like referral info if needed
+    },
+  });
+
+  if (!user) {
+    res.status(404).json({ message: 'User not found.' });
+  }
+
+  res.status(200).json({
+    message: 'User found.',
+    user,
+  });
+});

@@ -1,10 +1,5 @@
 import express from 'express';
-import {
-  getBetsWithStats,
-  getMarketOdds,
-  placeBet,
-  placeBet2,
-} from '../controller/bet';
+import { getBetsWithStats, getMarketOdds, placeBet2 } from '../controller/bet';
 
 const router = express.Router();
 
