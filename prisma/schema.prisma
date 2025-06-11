@@ -35,12 +35,14 @@ model User {
   sponsoredMarkets Market[]       @relation("CreatedMarkets")
 
   // Refferal system 
-  referralCode    String            @unique
-  referredById    String? // user who referred them
-  referredBy      User?             @relation("Referrals", fields: [referredById], references: [id])
-  referrals       User[]            @relation("Referrals")
-  rewards         Reward[]
-  PlatformRevenue PlatformRevenue[]
+  referralCode          String                  @unique
+  referredById          String? // user who referred them
+  referredBy            User?                   @relation("Referrals", fields: [referredById], references: [id])
+  referrals             User[]                  @relation("Referrals")
+  rewards               Reward[]
+  PlatformRevenue       PlatformRevenue[]
+  Tournament            Tournament[]
+  TournamentParticipant TournamentParticipant[]
 
   @@map("users")
 }
@@ -87,6 +89,16 @@ model Market {
   feePercent       Float          @default(5.0) // Platform cut
   creatorFeeShare  Float          @default(50.0) // % of platform fee given to creator
   players          PlayerMarket[]
+  // match
+  Match            Match?         @relation(fields: [matchId], references: [id])
+  matchId          String?
+
+  // 🔥 New: Entry Settings
+  entryType           MarketEntryType @default(FREE)
+  entryFee            Float? // used when entryType == PAID
+  requiredToken       String? // token symbol or address, for TOKEN_GATED
+  requiredTokenAmount Float? // how much token is required
+  entryDescription    String? // show message like "Hold 3 $X to join"
 
   // analytics
   totalPools        Float?            @default(0) // sum of all stakes
@@ -94,6 +106,71 @@ model Market {
   platformFeeEarned Float? // fee taken by platform
   creatorFeeEarned  Float? // fee given to market creator
   PlatformRevenue   PlatformRevenue[]
+  tournaments       Tournament[] //@relation(fields: [tournamentId], references: [id])
+  tournamentId      String?
+}
+
+// MATCH SCHEMA
+model Match {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  teamAId     String?
+  teamBId     String?
+  teamA       Team?       @relation("TeamA", fields: [teamAId], references: [id])
+  teamB       Team?       @relation("TeamB", fields: [teamBId], references: [id])
+  startsAt    DateTime
+  endsAt      DateTime?
+  matchStatus MatchStatus @default(UPCOMING)
+  createdAt   DateTime    @default(now())
+
+  // Relation to markets
+  markets Market[]
+  // Optional: you can add links to leagues later if needed
+}
+
+// Tournaments
+
+model Tournament {
+  id                  String          @id @default(cuid())
+  title               String
+  description         String?
+  coverUrl            String?
+  themeColor          String?
+  type                LeagueType      @default(OPEN)
+  entryType           LeagueEntryType @default(FREE)
+  scoringType         ScoringType     @default(TOTAL_POINTS)
+  status              MatchStatus     @default(UPCOMING)
+  entryFee            Float? // If PAID
+  requiredToken       String? // If TOKEN_GATED
+  requiredTokenAmount Float? // If TOKEN_GATED
+  entryDescription    String? // e.g. "Stake 10 $GOLD to enter"
+  prizePool           Float?          @default(0)
+  creatorId           String?
+  creator             User?           @relation(fields: [creatorId], references: [id])
+  startsAt            DateTime
+  endsAt              DateTime
+  resolvedAt          DateTime?
+  createdAt           DateTime        @default(now())
+  totalPointsUsed     Float           @default(0)
+  // Linked markets
+  markets             Market[]
+
+  // Users who joined
+  participants TournamentParticipant[]
+}
+
+model TournamentParticipant {
+  id           String   @id @default(cuid())
+  userId       String
+  tournamentId String
+  score        Float    @default(0)
+  joinedAt     DateTime @default(now())
+
+  user   User       @relation(fields: [userId], references: [id])
+  league Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@unique([userId, tournamentId])
 }
 
 model Outcome {
@@ -182,12 +259,14 @@ model Nationality {
 }
 
 model Team {
-  id       String   @id @default(cuid())
-  name     String   @unique
-  logo     String? // URL to team logo
-  leagueId String?
-  league   League?  @relation(fields: [leagueId], references: [id])
-  players  Player[]
+  id             String   @id @default(cuid())
+  name           String   @unique
+  logo           String? // URL to team logo
+  leagueId       String?
+  league         League?  @relation(fields: [leagueId], references: [id])
+  players        Player[]
+  matchesAsTeamA Match[]  @relation("TeamA")
+  matchesAsTeamB Match[]  @relation("TeamB")
 }
 
 model League {
@@ -332,6 +411,7 @@ enum NotificationType {
   NEW_MARKET
   STAKING_REWARD
   REWARD
+  TOURNAMENT_RESULT
 }
 
 enum MarketType {
@@ -361,6 +441,7 @@ enum RewardType {
   REFERRAL
   SPONSOR
   PROMO
+  TOURNAMENT
 }
 
 enum RewardStatus {
@@ -375,4 +456,38 @@ enum RevenueSource {
   SPONSOR_SHARE
   WITHDRAWAL_FEE
   OTHER
+  MARKET_ENTRY_FEE
+  TOURNAMENT_ENTRY_FEE
+}
+
+enum MatchStatus {
+  UPCOMING
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MarketEntryType {
+  FREE // No restriction
+  PAID // Requires fee in platform points or tokens
+  TOKEN_GATED // Requires holding a specific token
+}
+
+enum LeagueEntryType {
+  FREE
+  PAID
+  TOKEN_GATED
+}
+
+enum LeagueType {
+  OPEN
+  PRIVATE
+  PREMIUM
+  ESPORTS
+  FANTASY
+}
+
+enum ScoringType {
+  TOTAL_POINTS
+  WINS_ONLY
 }

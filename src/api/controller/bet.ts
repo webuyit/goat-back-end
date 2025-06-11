@@ -41,6 +41,57 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
     throw new Error('Market is not open for betting.');
   }
 
+  // --- ENTRY CONDITIONS CHECK ---
+  const market = outcome.market;
+
+  if (market.entryType === 'PAID') {
+    if (!market.entryFee || user.faucetPoints < market.entryFee) {
+      res.status(400).json({
+        message: 'Insufficient balance to enter this market (paid entry).',
+      });
+      throw new Error('Insufficient balance for paid entry');
+    }
+
+    // Deduct the entry fee only ONCE per user per market
+    const alreadyEntered = await prisma.bet.findFirst({
+      where: { userId, outcome: { marketId: market.id } },
+    });
+
+    if (!alreadyEntered) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { faucetPoints: { decrement: market.entryFee } },
+      });
+
+      await prisma.platformRevenue.create({
+        data: {
+          source: 'MARKET_ENTRY_FEE',
+          amount: market.entryFee,
+          userId,
+          marketId: market.id,
+        },
+      });
+    }
+  }
+
+  if (market.entryType === 'TOKEN_GATED') {
+    if (!market.requiredToken || !market.requiredTokenAmount) {
+      res.status(400).json({ message: 'Invalid token gate setup.' });
+      throw new Error('Market token gate improperly configured');
+    }
+
+    // You’d typically check the user’s wallet off-chain snapshot or via on-chain query
+    // Placeholder check for now:
+    const userHasToken = true; // simulate token check here
+
+    if (!userHasToken) {
+      res.status(403).json({
+        message: `You must hold ${market.requiredTokenAmount} ${market.requiredToken} to enter.`,
+      });
+      throw new Error('Token gating failed');
+    }
+  }
+
   const allOutcomes = await prisma.outcome.findMany({
     where: { marketId: outcome.marketId },
   });
