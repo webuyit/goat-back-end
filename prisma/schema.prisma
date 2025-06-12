@@ -112,17 +112,19 @@ model Market {
 
 // MATCH SCHEMA
 model Match {
-  id          String      @id @default(cuid())
+  id          String          @id @default(cuid())
   title       String
+  coverUrl    String?
+  category    MatchCategories @default(FOOTBALL)
   description String?
   teamAId     String?
   teamBId     String?
-  teamA       Team?       @relation("TeamA", fields: [teamAId], references: [id])
-  teamB       Team?       @relation("TeamB", fields: [teamBId], references: [id])
+  teamA       Team?           @relation("TeamA", fields: [teamAId], references: [id])
+  teamB       Team?           @relation("TeamB", fields: [teamBId], references: [id])
   startsAt    DateTime
   endsAt      DateTime?
-  matchStatus MatchStatus @default(UPCOMING)
-  createdAt   DateTime    @default(now())
+  matchStatus MatchStatus     @default(UPCOMING)
+  createdAt   DateTime        @default(now())
 
   // Relation to markets
   markets Market[]
@@ -484,6 +486,14 @@ enum LeagueType {
   PRIVATE
   PREMIUM
   ESPORTS
+  FANTASY
+}
+
+enum MatchCategories {
+  ESPORT
+  FOOTBALL
+  BASEBALL
+  SOCCER
   FANTASY
 }
 

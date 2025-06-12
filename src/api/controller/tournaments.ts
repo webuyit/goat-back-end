@@ -14,6 +14,9 @@ export const createTournament = expressAsyncHandler(async (req, res) => {
     requiredTokenAmount,
     coverUrl,
     creatorId,
+    entryDescription,
+    prizePool,
+    themeColor,
     marketIds = [],
   } = req.body;
 
@@ -51,6 +54,9 @@ export const createTournament = expressAsyncHandler(async (req, res) => {
         requiredTokenAmount,
         coverUrl,
         creatorId,
+        prizePool,
+        entryDescription,
+        themeColor,
         markets: {
           connect: marketIds.map((id: string) => ({ id })),
         },
@@ -382,4 +388,71 @@ export const getUserTournaments = expressAsyncHandler(async (req, res) => {
       score: tp.score,
     })),
   });
+});
+
+export const getTournaments = expressAsyncHandler(async (req, res) => {
+  const {
+    type,
+    entryType,
+    status,
+    creatorId,
+    search,
+    sortBy = 'createdAt',
+    sortOrder = 'desc',
+    page = 1,
+    limit = 10,
+  } = req.query;
+
+  try {
+    const filters: any = {};
+
+    if (type) filters.type = type;
+    if (entryType) filters.entryType = entryType;
+    if (status) filters.status = status;
+    if (creatorId) filters.creatorId = creatorId;
+    if (search) {
+      filters.title = {
+        contains: search,
+        mode: 'insensitive',
+      };
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const take = Number(limit);
+
+    const [tournaments, total] = await Promise.all([
+      prisma.tournament.findMany({
+        where: filters,
+        orderBy: { [sortBy as string]: sortOrder },
+        skip,
+        take,
+        include: {
+          _count: {
+            select: { participants: true },
+          },
+          markets: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+            },
+          },
+        },
+      }),
+      prisma.tournament.count({ where: filters }),
+    ]);
+
+    res.status(200).json({
+      tornaments: tournaments,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching tournaments', error);
+    res.status(500).json({ error: 'Failed to fetch tournaments' });
+  }
 });
