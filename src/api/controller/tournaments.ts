@@ -8,10 +8,14 @@ export const createTournament = expressAsyncHandler(async (req, res) => {
     description,
     startsAt,
     endsAt,
-    entryType = 'FREE',
+    entryType = 'OPEN',
     entryFee,
     requiredToken,
     requiredTokenAmount,
+    requiredTokenName,
+    requiredTokenSymbol,
+    requiredTokenLogoUrl,
+    featured,
     coverUrl,
     creatorId,
     entryDescription,
@@ -26,13 +30,13 @@ export const createTournament = expressAsyncHandler(async (req, res) => {
     return;
   }
 
-  if (entryType === 'PAID' && (!entryFee || entryFee <= 0)) {
-    res.status(400).json({ message: 'Paid tournaments require entry fee.' });
+  if (entryType === 'PREMIUM' && (!entryFee || entryFee <= 0)) {
+    res.status(400).json({ message: 'Premium tournaments require entry fee.' });
     return;
   }
 
   if (
-    entryType === 'TOKEN_GATED' &&
+    entryType === 'GATED' &&
     (!requiredToken || !requiredToken || requiredTokenAmount <= 0)
   ) {
     res
@@ -57,6 +61,10 @@ export const createTournament = expressAsyncHandler(async (req, res) => {
         prizePool,
         entryDescription,
         themeColor,
+        requiredTokenName,
+        requiredTokenSymbol,
+        requiredTokenLogoUrl,
+        featured,
         markets: {
           connect: marketIds.map((id: string) => ({ id })),
         },
@@ -111,7 +119,7 @@ export const joinTournament = expressAsyncHandler(async (req, res) => {
     return;
   }
 
-  if (tournament.entryType === 'PAID') {
+  if (tournament.entryType === 'PREMIUM') {
     if (!tournament.entryFee || user.faucetPoints < tournament.entryFee) {
       res
         .status(400)
@@ -136,7 +144,7 @@ export const joinTournament = expressAsyncHandler(async (req, res) => {
     });
   }
 
-  if (tournament.entryType === 'TOKEN_GATED') {
+  if (tournament.entryType === 'GATED') {
     // 💡 Replace this with real token balance check later
     const userHasToken = true; // simulate token ownership
     const hasEnough = true; // simulate token amount check

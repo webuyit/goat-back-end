@@ -96,6 +96,8 @@ export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
     endsAt,
     coverUrl,
     themeColor,
+    matchId,
+    description,
   } = req.body;
 
   if (!title || !outcomes || !Array.isArray(outcomes) || outcomes.length < 2) {
@@ -115,6 +117,7 @@ export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
   const market = await prisma.market.create({
     data: {
       title,
+      description,
       status: 'OPEN',
       marketType: 'FRIENDLY', // you can define this in your enum
       creatorId: userId,
@@ -122,6 +125,7 @@ export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
       endsAt,
       coverUrl,
       themeColor,
+      matchId,
       outcomes: {
         create: outcomes.map((label) => ({ label })),
       },
@@ -540,6 +544,162 @@ export const getMarketsWithStats = expressAsyncHandler(async (req, res) => {
       newMarketsLastWeek: lastWeekCount,
       growthPercent: Math.round(growthPercent * 100) / 100,
       marketsToday: todayCount,
+    },
+  });
+});
+
+// Get markets with no stats
+
+export const getMarkets = expressAsyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const search = (req.query.search as string) || '';
+  const status = req.query.status as string;
+  const marketType = req.query.marketType as string;
+  const playerId = req.query.playerId as string;
+
+  const skip = (page - 1) * limit;
+
+  // Dynamic filters
+  const where: Prisma.MarketWhereInput = {
+    AND: [
+      search
+        ? {
+            title: {
+              contains: search,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          }
+        : {},
+      status ? { status: status as MarketStatus } : {},
+      marketType ? { marketType: marketType as MarketType } : {},
+      playerId
+        ? {
+            players: {
+              some: {
+                playerId,
+              },
+            },
+          }
+        : {},
+    ],
+  };
+
+  // 1. Paginated Markets
+  const markets = await prisma.market.findMany({
+    where,
+    skip,
+    take: limit,
+    orderBy: {
+      createdAt: 'desc',
+    },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      marketType: true,
+      startsAt: true,
+      endsAt: true,
+      createdAt: true,
+      resolvedAt: true,
+      closedAt: true,
+      sponsoredStake: true,
+      feePercent: true,
+      creatorFeeShare: true,
+      themeColor: true,
+      coverUrl: true,
+      creatorFeeEarned: true,
+      platformFeeEarned: true,
+      totalLosers: true,
+      totalPools: true,
+      Match: {
+        select: {
+          title: true,
+          description: true,
+          teamA: {
+            select: {
+              name: true,
+              logo: true,
+            },
+          },
+          teamB: {
+            select: {
+              name: true,
+              logo: true,
+            },
+          },
+          startsAt: true,
+          endsAt: true,
+          category: true,
+        },
+      },
+      creator: {
+        select: {
+          id: true,
+          fullName: true,
+          profilePicture: true,
+        },
+      },
+      outcomes: {
+        select: {
+          id: true,
+          label: true,
+          totalStaked: true,
+          bettorsCount: true,
+        },
+      },
+      tournaments: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          prizePool: true,
+          entryType: true,
+          _count: {
+            select: {
+              participants: true,
+            },
+          },
+        },
+      },
+      players: {
+        select: {
+          player: {
+            select: {
+              id: true,
+              name: true,
+              profilePicture: true,
+              team: {
+                select: {
+                  name: true,
+                  logo: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // markets with odd
+  const enhancedMarkets = markets.map((market) => {
+    const outcomesWithOdds = calculateOdds(market.outcomes);
+    return {
+      ...market,
+      outcomes: outcomesWithOdds,
+    };
+  });
+  // 2. Total Markets
+  const totalMarkets = await prisma.market.count({ where });
+
+  res.status(200).json({
+    markets: enhancedMarkets,
+    pagination: {
+      total: totalMarkets,
+      page,
+      limit,
     },
   });
 });

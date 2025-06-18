@@ -68,29 +68,34 @@ model Wallet {
 }
 
 model Market {
-  id               String         @id @default(cuid())
+  id               String          @id @default(cuid())
   title            String
-  status           MarketStatus   @default(OPEN) // "open", "closed", "resolved"
+  description      String?
+  status           MarketStatus    @default(OPEN) // "open", "closed", "resolved"
   outcomes         Outcome[]
-  marketType       MarketType     @default(CUSTOM)
-  createdAt        DateTime       @default(now())
+  marketType       MarketType      @default(CUSTOM)
+  category         MatchCategories @default(FOOTBALL)
+  createdAt        DateTime        @default(now())
+  context          String?
   coverUrl         String?
   themeColor       String?
   resolvedAt       DateTime?
   closedAt         DateTime?
-  startsAt         DateTime       @default(now())
-  endsAt           DateTime       @default(now())
+  startsAt         DateTime        @default(now())
+  endsAt           DateTime        @default(now())
   winningOutcomeId String? // ID of the winning outcome
   resolvedById     String?
+  isFeatured       Boolean         @default(false)
+  isHot            Boolean         @default(false)
   // Sponsorship
   creatorId        String?
-  creator          User?          @relation("CreatedMarkets", fields: [creatorId], references: [id])
-  sponsoredStake   Float          @default(0) // Locked stake
-  feePercent       Float          @default(5.0) // Platform cut
-  creatorFeeShare  Float          @default(50.0) // % of platform fee given to creator
+  creator          User?           @relation("CreatedMarkets", fields: [creatorId], references: [id])
+  sponsoredStake   Float           @default(0) // Locked stake
+  feePercent       Float           @default(5.0) // Platform cut
+  creatorFeeShare  Float           @default(50.0) // % of platform fee given to creator
   players          PlayerMarket[]
   // match
-  Match            Match?         @relation(fields: [matchId], references: [id])
+  Match            Match?          @relation(fields: [matchId], references: [id])
   matchId          String?
 
   // 🔥 New: Entry Settings
@@ -134,29 +139,35 @@ model Match {
 // Tournaments
 
 model Tournament {
-  id                  String          @id @default(cuid())
-  title               String
-  description         String?
-  coverUrl            String?
-  themeColor          String?
-  type                LeagueType      @default(OPEN)
-  entryType           LeagueEntryType @default(FREE)
-  scoringType         ScoringType     @default(TOTAL_POINTS)
-  status              MatchStatus     @default(UPCOMING)
-  entryFee            Float? // If PAID
-  requiredToken       String? // If TOKEN_GATED
-  requiredTokenAmount Float? // If TOKEN_GATED
-  entryDescription    String? // e.g. "Stake 10 $GOLD to enter"
-  prizePool           Float?          @default(0)
-  creatorId           String?
-  creator             User?           @relation(fields: [creatorId], references: [id])
-  startsAt            DateTime
-  endsAt              DateTime
-  resolvedAt          DateTime?
-  createdAt           DateTime        @default(now())
-  totalPointsUsed     Float           @default(0)
+  id                   String          @id @default(cuid())
+  title                String
+  description          String?
+  coverUrl             String?
+  themeColor           String?
+  type                 LeagueType      @default(FOOTBALL)
+  entryType            LeagueEntryType @default(OPEN)
+  scoringType          ScoringType     @default(TOTAL_POINTS)
+  status               MatchStatus     @default(UPCOMING)
+  maxParticipants      Int             @default(10000)
+  difficulty           String?
+  featured             Boolean         @default(false)
+  entryFee             Float? // If PAID
+  requiredToken        String? // If TOKEN_GATED
+  requiredTokenAmount  Float? // If TOKEN_GATED
+  requiredTokenName    String?
+  requiredTokenSymbol  String?
+  requiredTokenLogoUrl String?
+  entryDescription     String? // e.g. "Stake 10 $GOLD to enter"
+  prizePool            Float?          @default(0)
+  creatorId            String?
+  creator              User?           @relation(fields: [creatorId], references: [id])
+  startsAt             DateTime
+  endsAt               DateTime
+  resolvedAt           DateTime?
+  createdAt            DateTime        @default(now())
+  totalPointsUsed      Float           @default(0)
   // Linked markets
-  markets             Market[]
+  markets              Market[]
 
   // Users who joined
   participants TournamentParticipant[]
@@ -239,18 +250,24 @@ model PlatformRevenue {
 //CATEGIRISE PLAYERS AND MARKETS
 
 model Player {
-  id             String         @id @default(cuid())
+  id             String           @id @default(cuid())
   name           String
   teamId         String?
   profilePicture String?
   nationalityId  String?
   mainColor      String?
+  verified       Boolean          @default(false)
+  isActive       Boolean          @default(true)
+  featured       Boolean          @default(false)
+  category       PlayerCategories @default(FOOTBALL)
+  age            Int              @default(18)
+  independent    Boolean          @default(false)
   stats          PlayerStat[]
-  team           Team?          @relation(fields: [teamId], references: [id])
-  nationality    Nationality?   @relation(fields: [nationalityId], references: [id])
+  team           Team?            @relation(fields: [teamId], references: [id])
+  nationality    Nationality?     @relation(fields: [nationalityId], references: [id])
   highlights     Highlight[]
   markets        PlayerMarket[]
-  createdAt      DateTime       @default(now())
+  createdAt      DateTime         @default(now())
 }
 
 model Nationality {
@@ -261,14 +278,15 @@ model Nationality {
 }
 
 model Team {
-  id             String   @id @default(cuid())
-  name           String   @unique
+  id             String         @id @default(cuid())
+  name           String         @unique
   logo           String? // URL to team logo
   leagueId       String?
-  league         League?  @relation(fields: [leagueId], references: [id])
+  category       TeamCategories @default(FOOTBALL)
+  league         League?        @relation(fields: [leagueId], references: [id])
   players        Player[]
-  matchesAsTeamA Match[]  @relation("TeamA")
-  matchesAsTeamB Match[]  @relation("TeamB")
+  matchesAsTeamA Match[]        @relation("TeamA")
+  matchesAsTeamB Match[]        @relation("TeamB")
 }
 
 model League {
@@ -298,16 +316,19 @@ model PlayerMarket {
 
 // Player stats 
 model PlayerStat {
-  id          String   @id @default(cuid())
-  playerId    String
-  player      Player   @relation(fields: [playerId], references: [id])
-  date        DateTime // Date of the stat (e.g., match date)
-  goals       Int      @default(0)
-  assists     Int      @default(0)
-  minutes     Int      @default(0)
-  yellowCards Int      @default(0)
-  redCards    Int      @default(0)
-  isInjured   Boolean  @default(false)
+  id           String   @id @default(cuid())
+  playerId     String
+  player       Player   @relation(fields: [playerId], references: [id])
+  date         DateTime // Date of the stat (e.g., match date)
+  goals        Int      @default(0)
+  assists      Int      @default(0)
+  minutes      Int      @default(0)
+  scoreRate    Int      @default(0)
+  yellowCards  Int      @default(0)
+  redCards     Int      @default(0)
+  points       Int      @default(0)
+  avarageScore Int      @default(0)
+  isInjured    Boolean  @default(false)
 
   createdAt DateTime @default(now())
 }
@@ -372,7 +393,10 @@ model Announcements {
   id          String  @id @default(cuid())
   title       String?
   description String?
-  coverUrl    String
+  coverUrl    String?
+  icon        String?
+  isActive    Boolean @default(false)
+  order       Int     @default(0)
   link        String
   themeColor  String?
   external    Boolean @default(false)
@@ -431,6 +455,7 @@ enum MarketStatus {
   DELAYED
   ENDED
   RESOLVED
+  LIVE
 }
 
 enum BetStatus {
@@ -467,6 +492,8 @@ enum MatchStatus {
   LIVE
   COMPLETED
   CANCELLED
+  RESOLVED
+  DELAYED
 }
 
 enum MarketEntryType {
@@ -476,17 +503,18 @@ enum MarketEntryType {
 }
 
 enum LeagueEntryType {
-  FREE
-  PAID
-  TOKEN_GATED
-}
-
-enum LeagueType {
   OPEN
   PRIVATE
   PREMIUM
+  GATED
+}
+
+enum LeagueType {
   ESPORTS
   FANTASY
+  FOOTBALL
+  BASEBALL
+  TENNIS
 }
 
 enum MatchCategories {
@@ -500,4 +528,14 @@ enum MatchCategories {
 enum ScoringType {
   TOTAL_POINTS
   WINS_ONLY
+}
+
+enum PlayerCategories {
+  FOOTBALL
+  BASEBALL
+}
+
+enum TeamCategories {
+  FOOTBALL
+  BASEBALL
 }

@@ -2,6 +2,7 @@ import express from 'express';
 import {
   createInHouseMarket,
   createSponsoredMarket,
+  getMarkets,
   getMarketsWithStats,
   resolveMarket,
 } from '../controller/markets';
@@ -12,5 +13,6 @@ router.route('/').post(createInHouseMarket);
 router.route('/resolve').patch(resolveMarket);
 router.route('/sponsored').post(createSponsoredMarket);
 router.route('/').get(getMarketsWithStats);
+router.route('/basic').get(getMarkets);
 
 export default router;

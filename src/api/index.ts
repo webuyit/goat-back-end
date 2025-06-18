@@ -13,7 +13,7 @@ import cron from 'node-cron';
 dotenv.config();
 
 const app: Express = express();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 4000;
 app.use(express.json());
 // ✅ Enable CORS for all routes
 app.use(cors());
