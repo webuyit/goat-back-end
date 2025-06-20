@@ -17,6 +17,7 @@
   "description": "",
   "devDependencies": {
     "@eslint/js": "^9.22.0",
+    "@prisma/client": "^6.8.2",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.1",
@@ -30,12 +31,12 @@
     "nodemon": "^3.1.9",
     "prettier": "3.5.3",
     "prettier-plugin-prisma": "^5.0.0",
+    "prisma": "6.8.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.26.1"
   },
   "dependencies": {
-    "@prisma/client": "^6.3.1",
     "@tanstack/react-query": "^5.79.0",
     "axios": "^1.9.0",
     "cors": "^2.8.5",

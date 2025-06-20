@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SILO_LENS = exports.SILO__MARKET_ADDRESS = exports.RPC_URL = void 0;
-exports.RPC_URL = "https://rpc.soniclabs.com";
-exports.SILO__MARKET_ADDRESS = "0x4E216C15697C1392fE59e1014B009505E05810Df";
-exports.SILO_LENS = "0xE05966aee69CeCD677a30f469812Ced650cE3b5E";
+exports.REFFERAL_FEE_SHARE = exports.SPONSOR_FEE_SHARE = exports.MAX_ODDS_CAP = exports.BETTING_PLATFORM_FEE = void 0;
+exports.BETTING_PLATFORM_FEE = 0.05;
+exports.MAX_ODDS_CAP = 10;
+exports.SPONSOR_FEE_SHARE = 0.03;
+exports.REFFERAL_FEE_SHARE = 0.01;
