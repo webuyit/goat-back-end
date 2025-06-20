@@ -48,9 +48,10 @@ export const registerUser = expressAsyncHandler(async (req, res) => {
   // CHECK IF EMAIL IS AVAILABLE
 
   const existingUser = await prisma.user.findUnique({
-    where: { email }, // assuming `email` is unique in DB schema
+    where: { privyId }, // assuming `email` is unique in DB schema
   });
 
+  console.log('already create an account', existingUser);
   if (existingUser) {
     res.status(200).json({
       message: 'User already exists. Linking current session.',
@@ -84,6 +85,7 @@ export const registerUser = expressAsyncHandler(async (req, res) => {
     },
   });
 
+  console.log('Registered user ', newUser);
   // Register wallet
 
   res.status(201).json({
@@ -214,7 +216,15 @@ export const getUser = expressAsyncHandler(async (req, res) => {
       ...(email && { email: String(email).toLowerCase() }),
     },
     include: {
-      wallets: true,
+      wallets: {
+        select: {
+          walletSource: true,
+          name: true,
+          publicKey: true,
+          active: true,
+        },
+      },
+      bets: {},
       // Add includes like referral info if needed
     },
   });
@@ -226,5 +236,51 @@ export const getUser = expressAsyncHandler(async (req, res) => {
   res.status(200).json({
     message: 'User found.',
     user,
+  });
+});
+
+export const getUserStats = expressAsyncHandler(async (req, res) => {
+  const { userId, privyId, email } = req.query;
+
+  if (!userId && !privyId && !email) {
+    res.status(400).json({
+      message: 'Provide at least one filter: userId, privyId, or email.',
+    });
+    return;
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      ...(userId && { id: String(userId) }),
+      ...(privyId && { privyId: String(privyId) }),
+      ...(email && { email: String(email).toLowerCase() }),
+    },
+    include: {
+      wallets: {
+        select: {
+          walletSource: true,
+          name: true,
+          publicKey: true,
+          active: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    res.status(404).json({ message: 'User not found.' });
+  }
+
+  const [betsCount, unreadNotifications] = await Promise.all([
+    prisma.bet.count({ where: { userId: user.id } }),
+    prisma.notification.count({ where: { userId: user.id, read: false } }),
+  ]);
+
+  res.status(200).json({
+    user,
+    stats: {
+      betsCount,
+      unreadNotifications,
+    },
   });
 });
