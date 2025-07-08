@@ -1,6 +1,9 @@
 import expressAsyncHandler from 'express-async-handler';
 import prisma from '../prisma-client';
-import { calculateOdds } from '../lib/calculate-odds';
+import {
+  calculateOdds,
+  simulateOddsWithUserStake,
+} from '../lib/calculate-odds';
 import { Prisma, BetStatus } from '@prisma/client';
 import { startOfWeek, subDays } from 'date-fns';
 import {
@@ -96,9 +99,19 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
     where: { marketId: outcome.marketId },
   });
 
-  const oddsArray = calculateOdds(allOutcomes);
-  const selectedOdds = oddsArray.find((o) => o.id === outcomeId);
-  const oddsAtBet = selectedOdds?.odds ?? 1;
+  // EXISTING CODE
+  const oddsSimulation = simulateOddsWithUserStake(
+    allOutcomes,
+    outcomeId,
+    amount,
+  );
+  const selectedOutcome = oddsSimulation.find((o) => o.id === outcomeId);
+  const oddsAtBet = selectedOutcome?.odds ?? 1;
+  const impliedProbability = selectedOutcome.impliedProbability;
+  const potentialPayout = selectedOutcome.potentialPayout;
+  const potentialProfit = selectedOutcome.potentialProfit;
+  //   EXISTING CODE
+
   // const feeAmount = Math.floor(amount * BETTING_PLATFORM_FEE);
   const feeAmount = Math.max(1, Math.round(amount * BETTING_PLATFORM_FEE));
   // Count user bets BEFORE transaction
@@ -139,7 +152,7 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
         outcomeId,
         amount,
         oddsAtBet,
-        potentialPayout: Math.floor(amount * oddsAtBet),
+        potentialPayout,
         status: 'PENDING',
         fee: feeAmount,
       },
@@ -330,7 +343,7 @@ export const placeBet2 = expressAsyncHandler(async (req, res) => {
     message: 'Bet placed successfully.',
     bet: placedBet,
     odds: oddsAtBet,
-    impliedProbability: selectedOdds?.impliedProbability ?? null,
+    impliedProbability,
   });
 });
 
