@@ -272,7 +272,7 @@ export const getUserStats = expressAsyncHandler(async (req, res) => {
   }
 
   const [betsCount, unreadNotifications] = await Promise.all([
-    prisma.bet.count({ where: { userId: user.id } }),
+    prisma.bet.count({ where: { userId: user.id, status: 'PENDING' } }),
     prisma.notification.count({ where: { userId: user.id, read: false } }),
   ]);
 
@@ -284,3 +284,176 @@ export const getUserStats = expressAsyncHandler(async (req, res) => {
     },
   });
 });
+
+export const getUserTransactions = expressAsyncHandler(async (req, res) => {
+  const { userId, privyId, page = 1, limit = 10, type } = req.query;
+
+  if (!userId && !privyId) {
+    res.status(400).json({ message: 'Missing userId or privyId' });
+    return;
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      ...(userId ? { id: userId as string } : {}),
+      ...(privyId ? { privyId: privyId as string } : {}),
+    },
+    select: { id: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const where = {
+    userId: user.id,
+    ...(type ? { type: type as any } : {}),
+  };
+
+  const [transactions, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: Number(limit),
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        token: true,
+        description: true,
+        transactionId: true,
+        createdAt: true,
+      },
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  res.status(200).json({
+    transactions,
+    pagination: {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+    },
+  });
+});
+
+// add  wallet
+export const addWalletToUser = expressAsyncHandler(async (req, res) => {
+  const { userId, publicKey, walletSource, name, chain } = req.body;
+
+  if (!userId || !publicKey || !walletSource) {
+    res.status(400).json({ message: 'Missing required wallet data' });
+    return;
+  }
+
+  // Check if user exists
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  // Prevent duplicate wallet for same user
+  const existingWallet = await prisma.wallet.findFirst({
+    where: {
+      ownerId: userId,
+      publicKey: publicKey.toLowerCase(),
+    },
+  });
+
+  if (existingWallet) {
+    res.status(409).json({ message: 'Wallet already exists for this user' });
+    return;
+  }
+
+  // Create wallet
+  const wallet = await prisma.wallet.create({
+    data: {
+      ownerId: userId,
+      name: name || walletSource,
+      publicKey: publicKey.toLowerCase(),
+      walletSource,
+      chain: chain || 'CHILIZ',
+    },
+  });
+
+  res.status(201).json({ message: 'Wallet added', wallet });
+});
+
+//   check early access
+
+export const earlyAccessChecker = expressAsyncHandler(async (req, res) => {
+  const { privyId } = req.query;
+  const user = await prisma.user.findFirst({
+    where: {
+      privyId: String(privyId),
+    },
+  });
+
+  if (!user) res.status(404).json({ error: 'User not found' });
+  res.json({ earlyAccess: !!user.earlyAccess });
+});
+
+// access code
+
+export const generateCodesController = async (req, res) => {
+  const count = parseInt(req.query.count as string) || 1;
+
+  const codes = await Promise.all(
+    Array.from({ length: count }).map(() =>
+      prisma.earlyAccessCode.create({
+        data: {
+          code: generateReferralCode(6),
+        },
+      }),
+    ),
+  );
+
+  return res.status(200).json({ codes });
+};
+
+export const submitCodeController = async (req, res) => {
+  const { code, privyId } = req.body;
+
+  if (!code || !privyId) {
+    return res.status(400).json({ error: 'Code and user ID are required.' });
+  }
+
+  const existingCode = await prisma.earlyAccessCode.findUnique({
+    where: { code },
+  });
+
+  if (!existingCode) {
+    return res.status(404).json({ error: 'Code not found or invalid.' });
+  }
+
+  if (existingCode.used) {
+    return res.status(409).json({ error: 'Code already used.' });
+  }
+
+  await prisma.earlyAccessCode.update({
+    where: { code },
+    data: {
+      used: true,
+      usedAt: new Date(),
+      usedBy: privyId,
+    },
+  });
+
+  await prisma.user.updateMany({
+    where: { privyId },
+    data: {
+      earlyAccess: true,
+    },
+  });
+
+  return res.status(200).json({ success: true });
+};

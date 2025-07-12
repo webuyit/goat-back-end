@@ -13,6 +13,10 @@ import {
 } from '../lib/constants';
 import { calculateFeeBreakdown } from '../lib/fees-calculator';
 
+import { startOfDay, endOfDay } from 'date-fns';
+
+const todayStart = startOfDay(new Date());
+const todayEnd = endOfDay(new Date());
 export const placeBet2 = expressAsyncHandler(async (req, res) => {
   const { userId, outcomeId, amount } = req.body;
 
@@ -466,6 +470,176 @@ export const getBetsWithStats = expressAsyncHandler(async (req, res) => {
       newBetsLastWeek: lastWeekCount,
       growthPercent: Math.round(growthPercent * 100) / 100,
       betsToday: todayCount,
+    },
+  });
+});
+// GET USER BETS
+
+export const getUserBetsCategorized = expressAsyncHandler(async (req, res) => {
+  const { userId, privyId } = req.query;
+
+  if (!userId && !privyId) {
+    res.status(400).json({ message: 'Missing userId or privyId' });
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      ...(userId ? { id: userId as string } : {}),
+      ...(privyId ? { privyId: privyId as string } : {}),
+    },
+    select: { id: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+  }
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const betSelect = {
+    id: true,
+    amount: true,
+    potentialPayout: true,
+    createdAt: true,
+    status: true,
+    oddsAtBet: true,
+    outcome: {
+      select: {
+        id: true,
+        label: true,
+        market: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            startsAt: true,
+            endsAt: true,
+            resolvedAt: true,
+            closedAt: true,
+            coverUrl: true,
+            Match: {
+              select: {
+                title: true,
+                description: true,
+                startsAt: true,
+                endsAt: true,
+                category: true,
+              },
+            },
+            players: {
+              select: {
+                player: {
+                  select: {
+                    id: true,
+                    name: true,
+                    profilePicture: true,
+                    team: {
+                      select: {
+                        name: true,
+                        logo: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  // Parallel fetching
+  const [liveBets, openBets, settledBets, resolvedTodayBets] =
+    await Promise.all([
+      prisma.bet.findMany({
+        where: {
+          userId: user.id,
+          outcome: {
+            market: {
+              status: 'LIVE',
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: betSelect,
+      }),
+
+      prisma.bet.findMany({
+        where: {
+          userId: user.id,
+          outcome: {
+            market: {
+              status: 'OPEN',
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: betSelect,
+      }),
+
+      prisma.bet.findMany({
+        where: {
+          userId: user.id,
+          outcome: {
+            market: {
+              status: 'RESOLVED',
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: betSelect,
+      }),
+
+      // 🎯 Only bets from resolved markets TODAY
+      prisma.bet.findMany({
+        where: {
+          userId: user.id,
+          outcome: {
+            market: {
+              status: 'RESOLVED',
+              resolvedAt: {
+                gte: todayStart,
+                lte: todayEnd,
+              },
+            },
+          },
+        },
+        select: {
+          amount: true,
+          potentialPayout: true,
+          status: true,
+        },
+      }),
+    ]);
+
+  // 🎯 Calculate profit only from today's resolved bets
+  let profit = 0;
+  let totalAmountUsed = 0;
+  resolvedTodayBets.forEach((bet) => {
+    totalAmountUsed += bet.amount;
+    if (bet.status === 'WON') {
+      profit += bet.potentialPayout - bet.amount;
+    } else {
+      profit -= bet.amount;
+    }
+  });
+
+  const formattedProfit = profit.toFixed(2);
+  const isPositive = profit >= 0;
+
+  res.status(200).json({
+    liveBets,
+    openBets,
+    settledBets,
+    profitToday: {
+      amount: formattedProfit,
+      isPositive,
+      totalAmountUsed: totalAmountUsed.toFixed(2),
     },
   });
 });

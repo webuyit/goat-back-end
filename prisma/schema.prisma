@@ -74,6 +74,8 @@ model Market {
   status           MarketStatus    @default(OPEN) // "open", "closed", "resolved"
   outcomes         Outcome[]
   marketType       MarketType      @default(CUSTOM)
+  marketCategory   String?
+  result           String?
   category         MatchCategories @default(FOOTBALL)
   createdAt        DateTime        @default(now())
   context          String?
@@ -256,7 +258,7 @@ model Player {
   profilePicture String?
   nationalityId  String?
   mainColor      String?
-  verified       Boolean          @default(false)
+  verified       Boolean          @default(true)
   isActive       Boolean          @default(true)
   featured       Boolean          @default(false)
   category       PlayerCategories @default(FOOTBALL)
@@ -402,6 +404,15 @@ model Announcements {
   external    Boolean @default(false)
 }
 
+model EarlyAccessCode {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  used      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+  usedBy    String? // You can store privyId or userId here
+}
+
 enum TransactionType {
   DEPOSIT
   WITHDRAW
@@ -533,9 +544,15 @@ enum ScoringType {
 enum PlayerCategories {
   FOOTBALL
   BASEBALL
+  TENNIS
+  ESPORT
+  BASKETBALL
 }
 
 enum TeamCategories {
   FOOTBALL
   BASEBALL
+  TENNIS
+  ESPORT
+  BASKETBALL
 }

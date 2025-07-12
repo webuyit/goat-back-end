@@ -98,9 +98,17 @@ export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
     themeColor,
     matchId,
     description,
+    marketCategory,
+    category,
   } = req.body;
 
-  if (!title || !outcomes || !Array.isArray(outcomes) || outcomes.length < 2) {
+  if (
+    !title ||
+    !marketCategory ||
+    !outcomes ||
+    !Array.isArray(outcomes) ||
+    outcomes.length < 2
+  ) {
     res.status(400).json({
       message:
         'Invalid market data. Title and at least 2 outcomes are required.',
@@ -125,6 +133,8 @@ export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
       endsAt,
       coverUrl,
       themeColor,
+      marketCategory,
+      category,
       matchId,
       outcomes: {
         create: outcomes.map((label) => ({ label })),
@@ -145,9 +155,9 @@ export const createInHouseMarket = expressAsyncHandler(async (req, res) => {
 
 // RESLOVE MARKET
 export const resolveMarket = expressAsyncHandler(async (req, res) => {
-  const { marketId, winningOutcomeId } = req.body;
+  const { marketId, winningOutcomeId, result, resolvedAt } = req.body;
 
-  if (!marketId || !winningOutcomeId) {
+  if (!marketId || !winningOutcomeId || !result || !resolvedAt) {
     res.status(400).json({ message: 'Missing marketId or winningOutcomeId.' });
     return;
   }
@@ -162,7 +172,8 @@ export const resolveMarket = expressAsyncHandler(async (req, res) => {
     const allBets = outcomes.flatMap((o) => o.bets);
 
     if (allBets.length === 0) {
-      res.status(404).json({ message: 'No bets found for this market.' });
+      res.status(200).json({ message: 'No bets found for this market.' });
+      return;
     }
 
     const winningOutcome = outcomes.find((o) => o.id === winningOutcomeId);
@@ -185,8 +196,11 @@ export const resolveMarket = expressAsyncHandler(async (req, res) => {
           }),
           prisma.user.update({
             where: { id: bet.userId },
-            data: { points: { increment: payout } },
+            data: { faucetPoints: { increment: payout } }, // for testnet bets
+            //data: { points: { increment: payout } }, // for real bets
           }),
+          // No creeating transaction for winning
+          /*
           prisma.transaction.create({
             data: {
               userId: bet.userId,
@@ -194,7 +208,8 @@ export const resolveMarket = expressAsyncHandler(async (req, res) => {
               type: 'BET_WON',
               transactionId: bet.id,
             },
-          }),
+          }),*/
+
           prisma.notification.create({
             data: {
               userId: bet.userId,
@@ -231,6 +246,8 @@ export const resolveMarket = expressAsyncHandler(async (req, res) => {
         data: {
           status: 'RESOLVED',
           winningOutcomeId,
+          result: result,
+          resolvedAt: resolvedAt,
         },
       }),
     );
@@ -243,148 +260,6 @@ export const resolveMarket = expressAsyncHandler(async (req, res) => {
   res
     .status(200)
     .json({ message: 'Market resolved. Bets settled and users notified.' });
-});
-
-export const resolveMarket2 = expressAsyncHandler(async (req, res) => {
-  const { marketId, winningOutcomeId } = req.body;
-
-  if (!marketId || !winningOutcomeId) {
-    res.status(400).json({ message: 'Missing marketId or winningOutcomeId.' });
-    return;
-  }
-
-  // Fetch market and outcomes (with bets)
-  const market = await prisma.market.findUnique({
-    where: { id: marketId },
-    include: {
-      outcomes: {
-        include: { bets: true },
-      },
-      tournaments: true, // if market belongs to any tournament
-    },
-  });
-
-  if (!market) {
-    res.status(404).json({ message: 'Market not found.' });
-    return;
-  }
-
-  const allBets = market.outcomes.flatMap((o) => o.bets);
-
-  if (allBets.length === 0) {
-    res.status(404).json({ message: 'No bets found for this market.' });
-    return;
-  }
-
-  const winningOutcome = market.outcomes.find((o) => o.id === winningOutcomeId);
-  if (!winningOutcome) {
-    res.status(400).json({ message: 'Winning outcome not found.' });
-    return;
-  }
-
-  const updates = [];
-  const participantScores: Record<string, number> = {};
-  const notifications = [];
-
-  for (const bet of allBets) {
-    const isWinner = bet.outcomeId === winningOutcomeId;
-
-    if (isWinner) {
-      const payout = Math.floor(bet.potentialPayout || 0);
-
-      updates.push(
-        prisma.bet.update({
-          where: { id: bet.id },
-          data: { status: 'WON' },
-        }),
-        prisma.user.update({
-          where: { id: bet.userId },
-          data: { points: { increment: payout } },
-        }),
-        prisma.transaction.create({
-          data: {
-            userId: bet.userId,
-            amount: payout,
-            type: 'BET_WON',
-            transactionId: bet.id,
-          },
-        }),
-      );
-
-      // Track user score if tournament exists
-      for (const tournament of market.tournaments) {
-        participantScores[`${tournament.id}:${bet.userId}`] =
-          (participantScores[`${tournament.id}:${bet.userId}`] || 0) + payout;
-      }
-
-      notifications.push({
-        userId: bet.userId,
-        title: '🎉 You won your bet!',
-        body: `You won ${payout} points on your bet.`,
-        type: 'BET_RESULT',
-        link: `/market/${marketId}`,
-      });
-    } else {
-      updates.push(
-        prisma.bet.update({
-          where: { id: bet.id },
-          data: { status: 'LOST' },
-        }),
-      );
-
-      notifications.push({
-        userId: bet.userId,
-        title: '❌ Your bet lost',
-        body: `Better luck next time. You lost your bet on this market.`,
-        type: 'BET_RESULT',
-        link: `/market/${marketId}`,
-      });
-    }
-  }
-
-  // Mark market as resolved
-  updates.push(
-    prisma.market.update({
-      where: { id: marketId },
-      data: {
-        status: 'RESOLVED',
-        winningOutcomeId,
-        resolvedAt: new Date(),
-      },
-    }),
-  );
-
-  // Update tournament participant scores
-  for (const key in participantScores) {
-    const [tournamentId, userId] = key.split(':');
-    const score = participantScores[key];
-
-    updates.push(
-      prisma.tournamentParticipant.updateMany({
-        where: {
-          tournamentId,
-          userId,
-        },
-        data: {
-          score: {
-            increment: score,
-          },
-        },
-      }),
-    );
-  }
-
-  // Send notifications (outside the transaction)
-  await prisma.$transaction(updates);
-
-  await Promise.all(
-    notifications.map((n) => prisma.notification.create({ data: n })),
-  );
-
-  res.status(200).json({
-    message:
-      'Market resolved. Bets settled, points updated, and tournament scores tracked.',
-  });
 });
 
 // GET MARKETS
@@ -480,7 +355,7 @@ export const getMarketsWithStats = expressAsyncHandler(async (req, res) => {
     },
   });
 
-  // markets with odd
+  // markets with odds
   const enhancedMarkets = markets.map((market) => {
     const outcomesWithOdds = calculateOdds(market.outcomes);
     return {
@@ -613,6 +488,8 @@ export const getMarkets = expressAsyncHandler(async (req, res) => {
       platformFeeEarned: true,
       totalLosers: true,
       totalPools: true,
+      category: true,
+      isFeatured: true,
       Match: {
         select: {
           title: true,
@@ -701,5 +578,297 @@ export const getMarkets = expressAsyncHandler(async (req, res) => {
       page,
       limit,
     },
+  });
+});
+
+// GET POPULAR MARKETS
+export const getPopularMarkets = expressAsyncHandler(async (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 6;
+
+  // Step 1: Fetch relevant markets with OPEN or LIVE status
+  const markets = await prisma.market.findMany({
+    where: {
+      status: {
+        in: ['OPEN', 'LIVE'],
+      },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    take: 30, // Fetch more initially so we can sort manually
+    select: {
+      /* id: true,
+      title: true,
+      status: true,
+      startsAt: true,
+      endsAt: true,
+      coverUrl: true,
+      outcomes: {
+        select: {
+          id: true,
+          label: true,
+          totalStaked: true,
+        },
+      },
+      Match: {
+        select: {
+          title: true,
+          teamA: { select: { name: true, logo: true } },
+          teamB: { select: { name: true, logo: true } },
+          startsAt: true,
+        },
+      },
+    },*/
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      marketType: true,
+      startsAt: true,
+      endsAt: true,
+      createdAt: true,
+      resolvedAt: true,
+      closedAt: true,
+      sponsoredStake: true,
+      feePercent: true,
+      creatorFeeShare: true,
+      themeColor: true,
+      coverUrl: true,
+      creatorFeeEarned: true,
+      platformFeeEarned: true,
+      totalLosers: true,
+      totalPools: true,
+      category: true,
+      isFeatured: true,
+      Match: {
+        select: {
+          title: true,
+          description: true,
+          teamA: {
+            select: {
+              name: true,
+              logo: true,
+            },
+          },
+          teamB: {
+            select: {
+              name: true,
+              logo: true,
+            },
+          },
+          startsAt: true,
+          endsAt: true,
+          category: true,
+        },
+      },
+      creator: {
+        select: {
+          id: true,
+          fullName: true,
+          profilePicture: true,
+        },
+      },
+      outcomes: {
+        select: {
+          id: true,
+          label: true,
+          totalStaked: true,
+          bettorsCount: true,
+        },
+      },
+      tournaments: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          prizePool: true,
+          entryType: true,
+          _count: {
+            select: {
+              participants: true,
+            },
+          },
+        },
+      },
+      players: {
+        select: {
+          player: {
+            select: {
+              id: true,
+              name: true,
+              profilePicture: true,
+              team: {
+                select: {
+                  name: true,
+                  logo: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Step 2: Calculate total TVL per market and attach it
+  const marketsWithTVL = markets.map((m) => ({
+    ...m,
+    totalTVL: m.outcomes.reduce((sum, o) => sum + o.totalStaked, 0),
+  }));
+
+  // Step 3: Sort by total TVL descending and enhance odds
+  const sorted = marketsWithTVL
+    .sort((a, b) => b.totalTVL - a.totalTVL)
+    .slice(0, limit)
+    .map((market) => ({
+      ...market,
+      outcomes: calculateOdds(market.outcomes),
+    }));
+
+  res.status(200).json({
+    markets: sorted,
+  });
+});
+
+// GET UPCOMING MARKETS
+
+export const getUpcomingMarkets = expressAsyncHandler(async (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 6;
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const markets = await prisma.market.findMany({
+    where: {
+      startsAt: {
+        gte: tomorrow,
+      },
+    },
+    orderBy: {
+      startsAt: 'asc',
+    },
+    take: limit,
+    select: {
+      /*id: true,
+      title: true,
+      status: true,
+      startsAt: true,
+      endsAt: true,
+      coverUrl: true,
+      outcomes: {
+        select: {
+          id: true,
+          label: true,
+          totalStaked: true,
+        },
+      },
+      Match: {
+        select: {
+          title: true,
+          teamA: { select: { name: true, logo: true } },
+          teamB: { select: { name: true, logo: true } },
+          startsAt: true,
+        },
+      },
+    },*/
+
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      marketType: true,
+      startsAt: true,
+      endsAt: true,
+      createdAt: true,
+      resolvedAt: true,
+      closedAt: true,
+      sponsoredStake: true,
+      feePercent: true,
+      creatorFeeShare: true,
+      themeColor: true,
+      coverUrl: true,
+      creatorFeeEarned: true,
+      platformFeeEarned: true,
+      totalLosers: true,
+      totalPools: true,
+      category: true,
+      isFeatured: true,
+      Match: {
+        select: {
+          title: true,
+          description: true,
+          teamA: {
+            select: {
+              name: true,
+              logo: true,
+            },
+          },
+          teamB: {
+            select: {
+              name: true,
+              logo: true,
+            },
+          },
+          startsAt: true,
+          endsAt: true,
+          category: true,
+        },
+      },
+      creator: {
+        select: {
+          id: true,
+          fullName: true,
+          profilePicture: true,
+        },
+      },
+      outcomes: {
+        select: {
+          id: true,
+          label: true,
+          totalStaked: true,
+          bettorsCount: true,
+        },
+      },
+      tournaments: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          prizePool: true,
+          entryType: true,
+          _count: {
+            select: {
+              participants: true,
+            },
+          },
+        },
+      },
+      players: {
+        select: {
+          player: {
+            select: {
+              id: true,
+              name: true,
+              profilePicture: true,
+              team: {
+                select: {
+                  name: true,
+                  logo: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const enhanced = markets.map((market) => ({
+    ...market,
+    outcomes: calculateOdds(market.outcomes),
+  }));
+
+  res.status(200).json({
+    markets: enhanced,
   });
 });

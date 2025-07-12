@@ -2,6 +2,7 @@ import expressAsyncHandler from 'express-async-handler';
 import prisma from '../prisma-client';
 import { Prisma } from '@prisma/client';
 import { subDays, startOfWeek, endOfWeek } from 'date-fns';
+import { calculateOdds } from '../lib/calculate-odds';
 
 // Register player without league
 export const registerPlayerWithTeamAndNationality = expressAsyncHandler(
@@ -424,6 +425,10 @@ export const getPlayerById = expressAsyncHandler(async (req, res) => {
               startsAt: true,
               endsAt: true,
               coverUrl: true,
+              description: true,
+              totalPools: true,
+              outcomes: true,
+              //players: true,
             },
           },
         },
@@ -437,11 +442,19 @@ export const getPlayerById = expressAsyncHandler(async (req, res) => {
 
   // Format markets and tournaments
   const markets = player.markets.map((entry) => entry.market);
+  // markets with odd
+  const enhancedMarkets = markets.map((market) => {
+    const outcomesWithOdds = calculateOdds(market.outcomes);
+    return {
+      ...market,
+      outcomes: outcomesWithOdds,
+    };
+  });
   //const tournaments = player.playersInTournaments.map((entry) => entry.tournament)
 
   res.status(200).json({
     ...player,
-    markets,
+    markets: enhancedMarkets,
     //tournaments,
   });
 });
