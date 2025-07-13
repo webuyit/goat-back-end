@@ -391,6 +391,30 @@ export const addWalletToUser = expressAsyncHandler(async (req, res) => {
 //   check early access
 
 export const earlyAccessChecker = expressAsyncHandler(async (req, res) => {
+  const { userId, privyId } = req.query;
+
+  if (!userId && !privyId) {
+    res.status(400).json({ error: 'Missing userId or privyId' });
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      ...(userId ? { id: String(userId) } : {}),
+      ...(privyId ? { privyId: String(privyId) } : {}),
+    },
+    select: {
+      earlyAccess: true,
+    },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: 'User not found' });
+  }
+
+  res.json({ earlyAccess: !!user.earlyAccess });
+});
+
+/*export const earlyAccessChecker = expressAsyncHandler(async (req, res) => {
   const { userId } = req.query;
   const user = await prisma.user.findFirst({
     where: {
@@ -400,7 +424,7 @@ export const earlyAccessChecker = expressAsyncHandler(async (req, res) => {
 
   if (!user) res.status(404).json({ error: 'User not found' });
   res.json({ earlyAccess: !!user.earlyAccess });
-});
+});*/
 
 // access code
 

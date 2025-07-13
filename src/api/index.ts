@@ -18,14 +18,17 @@ app.use(express.json());
 // ✅ Enable CORS for all routes
 //app.use(cors());
 
-cors({
-  origin: [
-    'http://localhost:3001',
-    'https://app.mygoat.fun/',
-    'http://localhost:3000',
-  ],
-  //credentials: true, // 👈 this part
-});
+app.use(
+  cors({
+    origin: [
+      'http://localhost:3001',
+      'https://app.mygoat.fun/',
+      'http://localhost:3000',
+      'https://goat-app-dashboard.vercel.app/',
+    ],
+    //credentials: true, // 👈 this part
+  }),
+);
 
 app.get('/', (req: Request, res: Response) => {
   res.status(200).send('GOAT');
