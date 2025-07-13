@@ -16,10 +16,19 @@ const app: Express = express();
 const port = process.env.PORT || 4000;
 app.use(express.json());
 // ✅ Enable CORS for all routes
-app.use(cors());
+//app.use(cors());
+
+cors({
+  origin: [
+    'http://localhost:3001',
+    'https://app.mygoat.fun/',
+    'http://localhost:3000',
+  ],
+  credentials: true, // 👈 this part
+});
 
 app.get('/', (req: Request, res: Response) => {
-  res.status(200).send('Sonic Defi APR/YIELS AND PROTOCOLS DATA AGGREGATOR');
+  res.status(200).send('GOAT');
 });
 
 app.use('/api/v1/users', userRoutes);
