@@ -391,10 +391,10 @@ export const addWalletToUser = expressAsyncHandler(async (req, res) => {
 //   check early access
 
 export const earlyAccessChecker = expressAsyncHandler(async (req, res) => {
-  const { privyId } = req.query;
+  const { userId } = req.query;
   const user = await prisma.user.findFirst({
     where: {
-      privyId: String(privyId),
+      id: String(userId),
     },
   });
 
