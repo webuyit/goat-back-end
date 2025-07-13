@@ -22,9 +22,9 @@ app.use(
   cors({
     origin: [
       'http://localhost:3001',
-      'https://app.mygoat.fun/',
+      'https://app.mygoat.fun',
       'http://localhost:3000',
-      'https://goat-app-dashboard.vercel.app/',
+      'https://goat-app-dashboard.vercel.app',
     ],
     //credentials: true, // 👈 this part
   }),
