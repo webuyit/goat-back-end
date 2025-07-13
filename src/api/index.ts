@@ -24,7 +24,7 @@ cors({
     'https://app.mygoat.fun/',
     'http://localhost:3000',
   ],
-  credentials: true, // 👈 this part
+  //credentials: true, // 👈 this part
 });
 
 app.get('/', (req: Request, res: Response) => {
