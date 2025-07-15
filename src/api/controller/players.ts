@@ -314,6 +314,74 @@ export const getPlayersWithStats = expressAsyncHandler(async (req, res) => {
 });
 
 // GET FEATURED PLAYERS
+export const getPlayersWithBasicInfo2 = expressAsyncHandler(
+  async (req, res) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const search = (req.query.search as string) || '';
+    const featured = req.query.featured === 'true';
+    const orderBy = (req.query.orderBy as string) || 'createdAt';
+    const direction =
+      (req.query.direction as string) === 'asc' ? 'asc' : 'desc';
+
+    const skip = (page - 1) * limit;
+
+    // Build where filter
+    const where: Prisma.PlayerWhereInput = {
+      ...(search && {
+        name: {
+          contains: search,
+          mode: Prisma.QueryMode.insensitive,
+        },
+      }),
+      ...(featured && { featured: true }),
+    };
+
+    const players = await prisma.player.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: {
+        [orderBy]: direction,
+      },
+      select: {
+        id: true,
+        name: true,
+        profilePicture: true,
+        mainColor: true,
+        featured: true,
+        team: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+          },
+        },
+        nationality: {
+          select: {
+            id: true,
+            name: true,
+            flag: true,
+          },
+        },
+      },
+    });
+
+    const total = await prisma.player.count({ where });
+
+    res.status(200).json({
+      players,
+      pagination: {
+        total,
+        page,
+        limit,
+      },
+    });
+  },
+);
+
+//GET PLAYERS WITH BASIC INFO ORDERED BY IS FEATURED
+
 export const getPlayersWithBasicInfo = expressAsyncHandler(async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
@@ -339,9 +407,10 @@ export const getPlayersWithBasicInfo = expressAsyncHandler(async (req, res) => {
     where,
     skip,
     take: limit,
-    orderBy: {
-      [orderBy]: direction,
-    },
+    orderBy: [
+      { featured: 'desc' }, // 🎯 Always featured first
+      { [orderBy]: direction }, // 👈 Then sort by any custom field
+    ],
     select: {
       id: true,
       name: true,
