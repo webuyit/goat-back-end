@@ -443,6 +443,19 @@ export const getTournaments = expressAsyncHandler(async (req, res) => {
               id: true,
               title: true,
               status: true,
+              description: true,
+              players: {
+                select: {
+                  player: {
+                    select: {
+                      profilePicture: true,
+                      name: true,
+                      category: true,
+                    },
+                  },
+                  playerId: true,
+                },
+              },
             },
           },
         },

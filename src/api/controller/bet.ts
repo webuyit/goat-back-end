@@ -516,6 +516,7 @@ export const getUserBetsCategorized = expressAsyncHandler(async (req, res) => {
             id: true,
             title: true,
             status: true,
+            marketCategory: true,
             startsAt: true,
             endsAt: true,
             resolvedAt: true,

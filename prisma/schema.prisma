@@ -526,6 +526,8 @@ enum LeagueType {
   FOOTBALL
   BASEBALL
   TENNIS
+  UFC
+  BOXING
 }
 
 enum MatchCategories {
@@ -534,6 +536,8 @@ enum MatchCategories {
   BASEBALL
   SOCCER
   FANTASY
+  UFC
+  BOXING
 }
 
 enum ScoringType {
@@ -547,6 +551,8 @@ enum PlayerCategories {
   TENNIS
   ESPORT
   BASKETBALL
+  UFC
+  BOXING
 }
 
 enum TeamCategories {
@@ -555,4 +561,6 @@ enum TeamCategories {
   TENNIS
   ESPORT
   BASKETBALL
+  UFC
+  BOXING
 }
